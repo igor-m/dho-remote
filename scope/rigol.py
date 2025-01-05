@@ -6,7 +6,7 @@ class ChannelNotEnabled(Exception):
 
 class scope(pyvisa.ResourceManager):
     def __init__(self):
-        print("scope init")
+        super().__init__()
 
     def scopeInit(self, ipaddress):
         try:
@@ -20,7 +20,7 @@ class scope(pyvisa.ResourceManager):
         try:
             print(self.instr.query('*IDN?'))
         except pyvisa.errors.VisaIOError:
-            print("Scope does not repond on IDN query. Please reboot")
+            print("Scope does not repond on IDN query. Please reboot scope")
             # self.instr.query("*WAI")
             quit(1)
 
@@ -47,9 +47,9 @@ class scope(pyvisa.ResourceManager):
         #     print("Not data returned by scope")
         #     return
         if min(data["y"]) == 0:
-            print("Data clips on minimum!")
+            print(f"CH{ch} data clips on minimum!")
         if max(data["y"]) == 2**16-1:
-            print("Data clips on minimum!")
+            print(f"CH{ch} data clips on maximum!")
         data["y"] = (data["y"] - data["yref"] - data["yorg"]) * data["yincr"]
         data["N"] = len(data["y"])
         data["x"] = np.linspace(0, data["N"] * data["xincr"], data["N"])

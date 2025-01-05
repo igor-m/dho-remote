@@ -27,8 +27,8 @@ class ScopeUI(tk.Tk):
         #  Not sure why this is needed, but now I can change the axis interactively
         # fig=plt.figure()
         # plt.close(fig)
-        data1=[]
-        data2=[]
+        self.data1=[]
+        self.data2=[]
 
     def create_buttons(self):
         # Vertical control colors
@@ -111,7 +111,7 @@ class ScopeUI(tk.Tk):
 
         #Bode plot
         bodeframe = ttk.Labelframe(self, text="Bodeplot")
-        ttk.Button(master=bodeframe, text="Plot", command=self.bodeplot).grid(row=0, column=0, columnspan=2)
+        ttk.Button(master=bodeframe, text="Bode Plot", command=partial(self.plot_bode)).grid(row=0, column=0, columnspan=2)
         self.bodefmin = tk.StringVar()
         self.bodefmin.set("1")
         self.bodefmax = tk.StringVar()
@@ -120,13 +120,9 @@ class ScopeUI(tk.Tk):
         ttk.Entry(master=bodeframe, width=5, textvariable=self.bodefmin).grid(row=2, column=0)
         ttk.Entry(master=bodeframe, width=5, textvariable=self.bodefmax).grid(row=2, column=1)
 
-        ttk.Button(master=bodeframe, text="Capture low", command=partial(self.bodeplot, capture_a=True)).grid(row=4,
-                                                                                                              column=0,
-                                                                                                              columnspan=1)
-        ttk.Button(master=bodeframe, text="Capture high", command=partial(self.bodeplot, capture_b=True)).grid(row=4,
-                                                                                                               column=1,
-                                                                                                               columnspan=1)
-
+        ttk.Button(master=bodeframe, text="Pre capture", command=partial(self.plot_bode, pre_capture=True)).grid(row=4,
+                                                                                                                 column=0,
+                                                                                                                 columnspan=2)
         vframe.grid(row=0, column=0, rowspan=3)
         hframe.grid(row=0, column=1, rowspan=1, sticky=tk.N)
         trigframe.grid(row=2, column=1)
@@ -138,69 +134,100 @@ class ScopeUI(tk.Tk):
     #     text = self.vlabel_val[ch]
     #     print(text.get("1.0", tk.END))
 
-    def bodeplot(self, capture_a=False, capture_b=False):
+    def plot_bode(self, pre_capture=False):
         instr = self.instr
         instr.write(":STOP")
-        if capture_a:
-            self.data1.append(self.get_data(1))
-            self.data2.append(self.get_data(2))
-            instr.write(":RUN")
-            return
-        data1 = self.get_data(1)
-        data2 = self.get_data(2)
+        self.data1.append(self.get_data(1))
+        self.data2.append(self.get_data(2))
         instr.write(":RUN")
 
+        if pre_capture:
+            self.warning['text']=f"Capture # {len(self.data1)}"
+            return
+
+        # xf, ywf1 = self.fft_trace(data1)
+        # xf2, ywf2 = self.fft_trace(data2)
+        #
+        # Vrms1 = 2.0 / data1["N"] * abs(ywf1[:data1["N"] // 2]) / np.sqrt(2)
+        # Vrms2 = 2.0 / data2["N"] * abs(ywf2[:data2["N"] // 2]) / np.sqrt(2)
+        # Phase1 = np.angle(ywf1[:data1["N"] // 2], deg=True)
+        # Phase2 = np.angle(ywf2[:data2["N"] // 2], deg=True)
+        # PhaseDiff = Phase2 - Phase1
+
+        # merge all runs (ywf data)
+        fft1=[]
+        fft2=[]
+        for data in self.data1:
+            xf, ywf = self.fft_trace(data)
+            fft1.append(ywf)
+        for data in self.data2:
+            xf, ywf = self.fft_trace(data)
+            fft2.append(ywf)
+
+        # Phase1_pre = np.angle(ywf1_pre[:self.data1["N"] // 2], deg=True)
+        # Phase2_pre = np.angle(ywf2_pre[:self.data2["N"] // 2], deg=True)
+        # PhaseDiff_pre = Phase2_pre - Phase1_pre
+        # Vrms1_pre = 2.0 / data1["N"] * abs(ywf1_pre[:data1["N"] // 2]) / np.sqrt(2)
+        # Vrms2_pre = 2.0 / data2["N"] * abs(ywf2_pre[:data2["N"] // 2]) / np.sqrt(2)
+        # # select the largest of the two
+        # sel_pre = Vrms1_pre > Vrms1
+        # Vrms1 = self.select_array(Vrms1, Vrms1_pre, sel_pre)
+        # Vrms2 = self.select_array(Vrms2, Vrms2_pre, sel_pre)
+        # PhaseDiff = self.select_array(PhaseDiff, PhaseDiff_pre, sel_pre)
+        mode='fftmax'
+        if mode=='fftmean':
+            fft_val1=np.mean(fft1,axis=0)
+            fft_val2=np.mean(fft2,axis=0)
+        else:
+            np.ma.asarray(fft1)
+            np.ma.asarray(fft2)
+            max_values=np.max(fft1,axis=0)
+            mask=fft1==max_values
+            fft_val1=np.max(fft1,axis=0)
+            fft_val2=np.max(fft2,axis=0)
+        Vrms1=2.0 / data["N"] * abs(fft_val1[:data["N"] // 2]) / np.sqrt(2)
+        Vrms2=2.0 / data["N"] * abs(fft_val2[:data["N"] // 2]) / np.sqrt(2)
+        PhaseDiff=np.angle(fft_val1[:data["N"] // 2])-np.angle(fft_val2[:data["N"] // 2])
+
+        data1=self.data1[0]
+        data2=self.data2[0]
         fig, ax = plt.subplots(3, layout="constrained", figsize=(6, 10))
+        if not hasattr(self, 'fig'):
+            pass
+        # ax=self.ax
+        # ax[0].cla()
         ax[0].plot(data1["x"], data1["y"],
                    data2["x"], data2["y"], "-")
         ax[0].legend([f"CH1", f"CH2"], loc='lower left')
         ax[0].grid(True)
 
-        xf1, ywf1 = self.fft_trace(data1)
-        xf2, ywf2 = self.fft_trace(data2)
+        # ax[1].cla()
+        ax[1].semilogx(xf, 20 * np.log10(Vrms1),
+                       xf, 20 * np.log10(Vrms2))
 
-        Vrms1 = 2.0 / data1["N"] * abs(ywf1[:data1["N"] // 2]) / np.sqrt(2)
-        Vrms2 = 2.0 / data2["N"] * abs(ywf2[:data2["N"] // 2]) / np.sqrt(2)
-        Phase1 = np.angle(ywf1[:data1["N"] // 2], deg=True)
-        Phase2 = np.angle(ywf2[:data2["N"] // 2], deg=True)
-        PhaseDiff = Phase2 - Phase1
-        if capture_b:
-            # merge both runs
-            xf1_pre, ywf1_pre = self.fft_trace(self.data1)
-            xf2_pre, ywf2_pre = self.fft_trace(self.data2)
-            Phase1_pre = np.angle(ywf1_pre[:self.data1["N"] // 2], deg=True)
-            Phase2_pre = np.angle(ywf2_pre[:self.data2["N"] // 2], deg=True)
-            PhaseDiff_pre = Phase2_pre - Phase1_pre
-            Vrms1_pre = 2.0 / data1["N"] * abs(ywf1_pre[:data1["N"] // 2]) / np.sqrt(2)
-            Vrms2_pre = 2.0 / data2["N"] * abs(ywf2_pre[:data2["N"] // 2]) / np.sqrt(2)
-            # select the largest of the two
-            sel_pre = Vrms1_pre > Vrms1
-            Vrms1 = self.select_array(Vrms1, Vrms1_pre, sel_pre)
-            Vrms2 = self.select_array(Vrms2, Vrms2_pre, sel_pre)
-            PhaseDiff = self.select_array(PhaseDiff, PhaseDiff_pre, sel_pre)
-
-        ax[1].semilogx(xf1, 20 * np.log10(Vrms1),
-                       xf2, 20 * np.log10(Vrms2))
         #Only plot those points that have a reasonable amplitude
         xbode = Vrms1 > (max(Vrms1[2:]) / 1000)
         # Skip DC
         xbode[-2:] = False
         # Use range input from user
-        xbode[xf1 < float(self.bodefmin.get())] = False
-        xbode[xf1 > float(self.bodefmax.get())] = False
+        xbode[xf < float(self.bodefmin.get())] = False
+        xbode[xf > float(self.bodefmax.get())] = False
 
-        bodedb = 20 * np.log10(Vrms2[xbode] / Vrms1[xbode])
-        ax[2].semilogx(xf1[xbode], bodedb)
+        bodedb = 20 * np.log10(Vrms2[xbode]) - 20 * np.log10(Vrms1[xbode])
+        ax[2].cla()
+        ax[2].semilogx(xf[xbode], bodedb, zorder=2)
+        # if not hasattr(self, 'ax2b'):
+        #     pass
         ax2b = ax[2].twinx()
+        # ax2b=self.ax2b
+        # ax2b.cla()
         bodephase = np.unwrap(PhaseDiff[xbode], period=360)
-        # if (max(bodephase)-min(bodephase))>180:
-        #     ax2b.set_ylim([-100, 0])
         ax[2].set_ylim([min(bodedb), max(bodedb)])
-        ax2b.semilogx(xf1[xbode], bodephase, color='orange')
+        ax2b.semilogx(xf[xbode], bodephase, color='orange', zorder=1)
         ax2b.set_ylim([min(bodephase), max(bodephase)])
         ax[2].grid(True)
         from matplotlib.ticker import MultipleLocator
-        if max(bodephase) - min(bodephase) < 1000:
+        if max(bodephase) - min(bodephase) < 500:
             ax2b.yaxis.set_major_locator(MultipleLocator(45))
 
         # labels
@@ -216,6 +243,9 @@ class ScopeUI(tk.Tk):
 
         ax[1].grid(True)
         plt.show()
+        self.data1=[]
+        self.data2=[]
+        self.warning['text'] = f"OK"
 
     def select_array(self, a, b, select):
         # if select use element from b, else a
