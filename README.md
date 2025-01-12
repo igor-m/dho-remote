@@ -1,15 +1,16 @@
 # dho-remote
 Control your digital oscilloscope remotely. Create FFT and Bode plots and save raw data.
 
-![Bodeplot_RC_1KHz](https://github.com/user-attachments/assets/5ae93d70-a034-462b-91e0-87efd4508b6e)
+![dso-remote](https://github.com/user-attachments/assets/7ea66529-6ad8-4621-9ad9-0dd2b22d09b0)
+
 
 From the user interface you can request a Bode plot from raw data of the oscilloscope. A network connection is needed.
 The Bode plot shows the amplitude and phase difference between CH2 and CH1.
 The program takes an FFT of CH1 and only uses frequency bins that contain sufficient energy. 
 CH1 should be driven by a signal that contains a lot of harmonics like a square wave or a pulse wave. 
 But any input will do as long as there is frequency content (harmonics) at the point you want to see.
-Since the harmonics typically becomes lower at higher order (20dB/decade), a Bode plot made from a single capture covers
-3 decades in frequencies before the noise becomes too large. 
+Since the harmonics typically lower at higher order (20dB/decade), a Bode plot made from a single capture covers
+3 decades in frequencies before the noise plays a role.
 A pre-capture options lets you capture multiple times. Each capture can be driven from a different fundamental frequency
 to extend the frequency range. All captures will be plotted as a single Bode diagram.
 
