@@ -9,6 +9,10 @@ class scope(pyvisa.ResourceManager):
         super().__init__()
 
     def scopeInit(self, ipaddress):
+        if self.debug:
+            self.instr = False
+            self.get_data = False
+            return
         try:
             self.instr = self.open_resource(f"TCPIP::{ipaddress}::INSTR")
         except:
@@ -20,7 +24,7 @@ class scope(pyvisa.ResourceManager):
         try:
             print(self.instr.query('*IDN?'))
         except pyvisa.errors.VisaIOError:
-            print("Scope does not repond on IDN query. Please reboot scope")
+            print("Scope does not respond on IDN query. Please reboot scope")
             # self.instr.query("*WAI")
             quit(1)
 
