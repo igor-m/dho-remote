@@ -22,6 +22,9 @@ to extend the frequency range. All captures will be plotted as a single Bode dia
 * Scale the vertical setting such that the signal is a big as possible, but don't let it clip (or use AUTO setting)
 * Press "Plot" and you will get a Bode plot from 20Hz to well above 20kHz.
 
+## Example of measuring an crystal
+Watch this [youtube video](https://www.youtube.com/watch?v=M2XBamR0O_g) to see how you a crystal can be measured.
+
 
 # Plot navigation
 The plots are made by pyplot. See [Navigation keyboard shortcuts](https://matplotlib.org/stable/users/explain/figure/interactive.html#navigation-keyboard-shortcuts)
@@ -40,3 +43,7 @@ A swaw-tooth signal is optimal as it contains both odd and even harmonics. This 
 in the first decade.
 
 Noise can be lowered by averaging on the oscilloscope. N=16 will give a 6dB lower noise floor.
+# Update log
+* V1.1
+1. corrected max selection when using multiple captures
+2. Fixed phase display from radian to degrees.
