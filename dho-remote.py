@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
 import tkinter as tk
@@ -8,9 +9,10 @@ from functools import partial
 import pickle
 import datetime
 
-from scope.rigol import scope, siglent, ChannelNotEnabled
+from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version="v1.1"
+version = "v1.2"
+
 class ScopeUI(tk.Tk):
     # data1: np.array
     # data2: np.array
@@ -20,6 +22,7 @@ class ScopeUI(tk.Tk):
         # self.geometry("240x200")
         self.instr = rm.instr
         self.get_data = rm.get_data
+        self.bode_setup = rm.bode_setup
 
         self.title("DHO-remote")
         self.resizable(False, False)
@@ -29,13 +32,14 @@ class ScopeUI(tk.Tk):
         #  Not sure why this is needed, but now I can change the axis interactively
         # fig=plt.figure()
         # plt.close(fig)
-        self.data1=[]
-        self.data2=[]
+        self.data1 = []
+        self.data2 = []
 
     def create_buttons(self):
         # Vertical control colors
         self.vfg = {}
-        self.vfg[1] = "#fcfa23"  # yellow
+        # self.vfg[1] = "#fcfa23"  # yellow
+        self.vfg[1] = "gold"  # when on white background
         self.vfg[2] = "#16f7fe"  # cyan
         self.vfg[3] = "#fe02fe"  # magenta
         self.vfg[4] = "#047efa"  # cyan-blue
@@ -113,19 +117,20 @@ class ScopeUI(tk.Tk):
 
         #Bode plot
         bodeframe = ttk.Labelframe(self, text="Bodeplot")
-        ttk.Button(master=bodeframe, text="Bode Plot", command=partial(self.plot_bode)).grid(row=0, column=0, columnspan=2)
+        ttk.Button(master=bodeframe, text="Bode Plot", command=partial(self.plot_bode)).grid(row=0, column=0,columnspan=2)
         ttk.Button(master=bodeframe, text="Pre capture", command=partial(self.plot_bode, pre_capture=True)).grid(row=1,column=0,columnspan=2)
         self.bodefmin = tk.StringVar()
         self.bodefmin.set("1")
         self.bodefmax = tk.StringVar()
         self.bodefmax.set("1e8")
         ttk.Label(master=bodeframe, text="Frequency range").grid(row=2, column=0, columnspan=2)
-        ttk.Entry(master=bodeframe, width=5, textvariable=self.bodefmin).grid(row=3, column=0)
-        ttk.Entry(master=bodeframe, width=5, textvariable=self.bodefmax).grid(row=3, column=1)
+        ttk.Entry(master=bodeframe, width=6, textvariable=self.bodefmin).grid(row=3, column=0)
+        ttk.Entry(master=bodeframe, width=6, textvariable=self.bodefmax).grid(row=3, column=1)
+        ttk.Button(master=bodeframe, text="Setup scope", command=partial(self.bode_setup)).grid(row=4,column=0,columnspan=2)
 
         self.ampfilter = tk.StringVar()
         self.ampfilter.set("60")
-        ttk.Label(master=bodeframe, text="dB below max").grid(row=5, column=0, columnspan=2)
+        ttk.Label(master=bodeframe, text="dB below 0dBfs").grid(row=5, column=0, columnspan=2)
         ttk.Entry(master=bodeframe, width=5, textvariable=self.ampfilter).grid(row=6, column=0)
 
         vframe.grid(row=0, column=0, rowspan=3, sticky=tk.N)
@@ -133,7 +138,6 @@ class ScopeUI(tk.Tk):
         trigframe.grid(row=4, column=0)
         bodeframe.grid(row=1, column=1, rowspan=3, sticky=tk.W)
         self.warning = ttk.Label(text="OK")
-
 
         self.warning.grid(row=4, column=1, sticky=tk.EW)
 
@@ -145,79 +149,76 @@ class ScopeUI(tk.Tk):
         instr = self.instr
         if self.debug:
             with open("debug.pickle", "rb") as f:
-                self.data1, self.data2=pickle.load(f)
+                self.data1, self.data2 = pickle.load(f)
         else:
             instr.write(":STOP")
             self.data1.append(self.get_data(1))
             self.data2.append(self.get_data(2))
             instr.write(":RUN")
 
-
         if pre_capture:
-            self.warning['text']=f"Capture # {len(self.data1)}"
+            self.warning['text'] = f"Capture # {len(self.data1)}"
             return
 
         # merge all runs (ywf data)
-        fft1=np.zeros(1)
-        fft2=np.zeros(1)
+        fft1 = np.zeros(1)
+        fft2 = np.zeros(1)
+        window="kaiser"
         for data in self.data1:
-            xf, ywf = self.fft_trace(data)
-            # fft1.append(ywf)
+            xf, ywf = self.fft_trace(data,window)
             if len(fft1) == 1:
-                fft1=np.asarray(ywf)
+                fft1 = np.asarray(ywf)
             else:
-                fft1=np.vstack((fft1,ywf))
+                #TODO: xf can also change between captures. This is not handled at the moment.
+                fft1 = np.vstack((fft1, ywf))
         for data in self.data2:
-            xf, ywf = self.fft_trace(data)
+            xf, ywf = self.fft_trace(data,window)
             if len(fft2) == 1:
-                fft2=np.asarray(ywf)
+                fft2 = np.asarray(ywf)
             else:
-                fft2=np.vstack((fft2,ywf))
-            # fft2.append(ywf)
+                fft2 = np.vstack((fft2, ywf))
 
-        mode='fftmax'
-        if mode=='fftmean':
-            fft_val1=np.mean(fft1,axis=0)
-            fft_val2=np.mean(fft2,axis=0)
+        mode = 'fftmax'
+        if mode == 'fftmean':
+            fft_val1 = np.mean(fft1, axis=0)
+            fft_val2 = np.mean(fft2, axis=0)
         else:
             if len(self.data1) == 1:
-                fft_val1=fft1
-                fft_val2=fft2
+                fft_val1 = fft1
+                fft_val2 = fft2
             else:
-                max_indices=np.argmax(np.abs(fft1),axis=0)
-                fft_val1=fft1[max_indices, range(fft1.shape[1])]
-                fft_val2=fft2[max_indices, range(fft2.shape[1])]
-        Vrms1=2.0 / data["N"] * abs(fft_val1[:data["N"] // 2]) / np.sqrt(2)
-        Vrms2=2.0 / data["N"] * abs(fft_val2[:data["N"] // 2]) / np.sqrt(2)
-        s21=(fft_val2/fft_val1)[:data["N"] // 2]
-        PhaseDiff=np.rad2deg(np.angle(s21))
+                max_indices = np.argmax(np.abs(fft1), axis=0)
+                fft_val1 = fft1[max_indices, range(fft1.shape[1])]
+                fft_val2 = fft2[max_indices, range(fft2.shape[1])]
+        Vrms1 = 2.0 / data["N"] * abs(fft_val1[:data["N"] // 2]) / np.sqrt(2)
+        Vrms2 = 2.0 / data["N"] * abs(fft_val2[:data["N"] // 2]) / np.sqrt(2)
+        s21 = (fft_val2 / fft_val1)[:data["N"] // 2]
+        PhaseDiff = np.rad2deg(np.angle(s21))
 
-        data1=self.data1[0]
-        data2=self.data2[0]
+        data1 = self.data1[0]
+        data2 = self.data2[0]
+        # plt.style.use('dark_background')
         fig, ax = plt.subplots(3, layout="constrained", figsize=(6, 10))
-        if not hasattr(self, 'fig'):
-            pass
-        ax[0].plot(data1["x"], data1["y"],
-                   data2["x"], data2["y"], "-")
+        ax[0].plot(data1["x"], data1["y"], self.vfg[1],
+                   data2["x"], data2["y"], self.vfg[2])
         ax[0].legend([f"CH1", f"CH2"], loc='lower left')
         ax[0].grid(True)
 
         # ax[1].cla()
-        ax[1].semilogx(xf, 20 * np.log10(Vrms1),
-                       xf, 20 * np.log10(Vrms2))
+        ax[1].semilogx(xf, 20 * np.log10(Vrms1), self.vfg[1],
+                       xf, 20 * np.log10(Vrms2), self.vfg[2] )
 
         #Only plot those points that have a reasonable amplitude
-        # maxv = 1000 if len(self.data1) >1 else 1000
-        # max full scale amplitude
-        maxv=self.data1[-0]["yincr"]*2**14
-        minv=maxv*10**(-float(self.ampfilter.get())/20)
+        # max full scale amplitude. For rigol 16 bits vertical resolution. so amplitude is 15 bits
+        maxv = (self.data1[-0]["ymax"] - self.data1[-0]["ymin"]) / 2 * np.sqrt(0.5)
+        minv = maxv * 10 ** (-float(self.ampfilter.get()) / 20)
         xmask = Vrms1 > minv
         # Skip DC
         # The last entries are not that accurate
         xmask[-2:] = False
         # skip all frequencies below one tenth of the fundamental
-        fmax=xf[Vrms1.argmax()]
-        xmask[xf < fmax/10] = False
+        fmax = xf[Vrms1.argmax()]
+        xmask[xf < fmax / 10] = False
         # Use range input from user
         xmask[xf < float(self.bodefmin.get())] = False
         xmask[xf > float(self.bodefmax.get())] = False
@@ -237,11 +238,11 @@ class ScopeUI(tk.Tk):
         from matplotlib.ticker import MultipleLocator
         if max(bodephase) - min(bodephase) < 500:
             ax2b.yaxis.set_major_locator(MultipleLocator(45))
-        if max(bodephase) - min(bodephase) < 90 :
-            ax2b.set_ylim([min(bodephase)-45, max(bodephase)+45])
+        if max(bodephase) - min(bodephase) < 90:
+            ax2b.set_ylim([min(bodephase) - 45, max(bodephase) + 45])
 
         #Put phase is the background
-        ax[2].set_zorder(ax[2].get_zorder()+1)
+        ax[2].set_zorder(ax[2].get_zorder() + 1)
         ax[2].set_frame_on(False)
 
         # labels
@@ -259,14 +260,19 @@ class ScopeUI(tk.Tk):
 
         if not self.debug and False:
             try:
-                date=datetime.datetime.now()
+                date = datetime.datetime.now()
                 with open(date.strftime("%Y-%m-%d-%X.bplt"), "wb") as f:
-                    pickle.dump((self.data1,self.data2), f, protocol=pickle.HIGHEST_PROTOCOL)
+                    pickle.dump((self.data1, self.data2), f, protocol=pickle.HIGHEST_PROTOCOL)
             except Exception as ex:
                 print("Error during pickling object (Possibly unsupported):", ex)
 
-        self.data1=[]
-        self.data2=[]
+        binwidth = data1["sr"] / data1["mdepth"]
+        print(f'Sample rate={data["sr"] / 1e6:g} Ms')
+        print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
+        print(f"Apply frequency below {binwidth} Hz")
+
+        self.data1 = []
+        self.data2 = []
         self.warning['text'] = f"OK"
         plt.show()
 
@@ -340,18 +346,17 @@ class ScopeUI(tk.Tk):
         except:
             text["text"] = "?"
             return
-        match scale:
-            case _ if scale < 1e-6:
-                scale = int(scale * 1e9)
-                scale_unit = "ns"
-            case _ if scale < 1e-3:
-                scale = int(scale * 1e6)
-                scale_unit = "us"
-            case _ if scale < 1:
-                scale = int(scale * 1e3)
-                scale_unit = "ms"
-            case _:
-                scale_unit = "s"
+        if scale < 1e-6:
+            scale = int(scale * 1e9)
+            scale_unit = "ns"
+        elif scale < 1e-3:
+            scale = int(scale * 1e6)
+            scale_unit = "us"
+        elif scale < 1:
+            scale = int(scale * 1e3)
+            scale_unit = "ms"
+        else:
+            scale_unit = "s"
         # text.delete("1.0", tk.END)
         # text.insert("1.0", f"{scale}{scale_unit}")
         text["text"] = f"{scale}{scale_unit}"
@@ -368,10 +373,9 @@ class ScopeUI(tk.Tk):
             self.warning["text"] = f"Channel {ch} is not enabled"
             print(f"Channel {ch} is not enabled")
             return 1
-        # data["N"] = data["n"]
         self.instr.write(":RUN")
-        print(f"Sample rate={data["sr"] / 1e6:g} Ms")
-        print(f"FFT max freq={data["sr"] / 2e6:g}MHz")
+        print(f'Sample rate={data["sr"] / 1e6:g} Ms')
+        print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
         binwidth = data["sr"] / data["mdepth"]
         # If the FFT has been windowed using Hanning the noise bandwidth needs to be corrected
         hann_nbw_correction_db = np.log10(1.5)
@@ -393,36 +397,35 @@ class ScopeUI(tk.Tk):
             # noinspection PyTypeChecker
             return np.convolve(x, bmw, 'same') / (sum(bmw) / len(bmw))
 
-        xf, ywf = self.fft_trace(data)
-        # ax[0].plot(data["x"],data["y"],label="CH1")
+        xf, ywf = self.fft_trace(data,window="kaiser")
         Vrms = 2.0 / data["N"] * abs(ywf[:data["N"] // 2]) / np.sqrt(2)
         avg_size = min(500, int(data["N"] / 10))
-        print(f"Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"])}")
+        print(f'Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"])}')
         Vavg = moving_average(Vrms ** 2, avg_size * 2)
         Vavg = (Vavg / avg_size / 2) ** 0.5
 
         fig, ax = plt.subplots(3, layout="constrained", figsize=(6, 10))
         if print_noise:
-            ax[0].semilogy(xf, Vrms,
-                           xf[avg_size:], (Vavg[avg_size:] / 10 ** (noiseBW / 20)), "-")
+            ax[0].semilogy(xf, Vrms, self.vfg[ch],
+                           xf[avg_size:], (Vavg[avg_size:] / 10 ** (noiseBW / 20)))
         else:
-            ax[0].semilogy(xf, Vrms, "-")
+            ax[0].semilogy(xf, Vrms, self.vfg[ch])
         ax[0].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
         ax[0].grid(True)
         ax[0].set_xlabel("Freq F(Hz)")
         ax[0].set_ylabel("V")
 
         if print_noise:
-            ax[1].semilogx(xf, 20 * np.log10(Vrms),
+            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch],
                            xf[avg_size:], 20 * np.log10(Vavg[avg_size:]) - noiseBW)
         else:
-            ax[1].semilogx(xf, 20 * np.log10(Vrms))
+            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch])
         ax[1].grid(True)
         ax[1].set_xlabel("Freq (Hz)")
         ax[1].set_ylabel("dBV")
         ax[1].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
 
-        ax[2].plot(data["x"], data["y"], "-")
+        ax[2].plot(data["x"], data["y"], self.vfg[ch])
         ax[2].grid(True)
         ax[2].set_xlabel("time (s)")
         ax[2].set_ylabel("V")
@@ -430,16 +433,19 @@ class ScopeUI(tk.Tk):
         # plt.pause(.001)
         plt.show()
 
-    def fft_trace(self, data):
+    def fft_trace(self, data, window="flat"):
         # 1kHz scope calibration is 3Vpp => db20(2*3/pi)=5.62dBVa and 2.62dBVrms
-        ftw = flattop(data["N"])
-        bmw = blackman(data["N"])
-        flat = np.ones(data["N"])
-        kaiserw = kaiser(data["N"], beta=14)
-        window = kaiserw
+        if window == "ftw":
+            win = flattop(data["N"])
+        elif window == "bmw":
+            win = blackman(data["N"])
+        elif window == "flat":
+            win = np.ones(data["N"])
+        elif window == "kaiser":
+            win = kaiser(data["N"], beta=14)
         # noinspection PyTypeChecker
-        cpg = sum(window) / len(window)  # coherent power gain
-        ywf = fft(data["y"] * window / cpg)
+        cpg = sum(win) / len(win)  # coherent power gain
+        ywf = fft(data["y"] * win / cpg)
         # ywf=np.ones(n)
         xf = fftfreq(data["N"], data["xincr"])[:data["N"] // 2]
         return xf, ywf
@@ -465,25 +471,25 @@ class ScopeUI(tk.Tk):
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Remote control your oscilloscope")
     parser.add_argument("-v", "--version", action="store_true", help="show version")
-    parser.add_argument("ip_address", help="IP or hostname of oscilloscope")
+    parser.add_argument("-i", "--ip", default="192.168.1.8", help="IP or hostname of oscilloscope")
     parser.add_argument("-m", "--scope_brand", default="rigol", help="scope brand")
     parser.add_argument("-d", "--debug", action="store_true", help="debug...")
     args = parser.parse_args()
-    match args.scope_brand:
-        case "rigol":
-            rm = scope()
-        case "siglent":
-            rm = siglent()
-        case _:
-            print("Unkown model")
-            quit(1)
+    if args.scope_brand == "rigol":
+        rm = Scope()
+    elif args.scope_brand == "siglent":
+        rm = Siglent()
+    else:
+        print("Unkown model")
+        quit(1)
+
     if args.version:
         print(f"dho-remote {version}")
         quit(0)
-    rm.debug=args.debug
-    rm.scopeInit(args.ip_address)
+    rm.debug = args.debug
+    rm.scope_init(args.ip)
     ui = ScopeUI(rm)
-    ui.debug=args.debug
+    ui.debug = args.debug
     ui.mainloop()
