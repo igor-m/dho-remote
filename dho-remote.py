@@ -230,8 +230,7 @@ class ScopeUI(tk.Tk):
         # if not hasattr(self, 'ax2b'):
         #     pass
         ax2b = ax[2].twinx()
-        # bodephase = np.unwrap(PhaseDiff[xmask], period=360)
-        bodephase = PhaseDiff[xmask]
+        bodephase = np.unwrap(PhaseDiff[xmask], period=360)
         ax[2].set_ylim([min(bodedb), max(bodedb)])
         ax2b.semilogx(xf[xmask], bodephase, "x-", color='orange', zorder=1)
         ax[2].grid(True)
