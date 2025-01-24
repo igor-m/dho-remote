@@ -28,7 +28,11 @@ Watch this [youtube video](https://www.youtube.com/watch?v=M2XBamR0O_g) to see h
 
 
 # Plot navigation
-The plots are made by pyplot. See [Navigation keyboard shortcuts](https://matplotlib.org/stable/users/explain/figure/interactive.html#navigation-keyboard-shortcuts)
+The plots are made with pyplot. After the zoom button is selected, keep the x or y key pressed to limit the zoom to
+the x or y-axis only.
+The "L" key toggles the x-axis between a logarithmic and a linear scale.
+All shortscuts can be fore
+See [Navigation keyboard shortcuts](https://matplotlib.org/stable/users/explain/figure/interactive.html#navigation-keyboard-shortcuts)
 
 # Scope support
 I only tested this with a RIGOL DHO804. The brand can be specified with the -m command, but the only option is "rigol"
@@ -52,6 +56,11 @@ Pre capture only extends the frequency range if the setting of the scope remains
 is changed between captures, the result is wrong.
 
 # Update log
+* V1.3
+1. Loopgain analysis added (argument --loopgain)
+2. FFT window selection menu added
+3. Hann window added
+4. Selection algorithm for Bode points optimized
 * V1.2
 1. Auto setup added
 2. Trace colors now match the scope
