@@ -11,7 +11,7 @@ class Scope(pyvisa.ResourceManager):
         super().__init__()
 
     def scope_init(self, ipaddress):
-        if self.debug:
+        if self.debug == 2:
             self.instr = False
             self.get_data = False
             return
@@ -29,6 +29,8 @@ class Scope(pyvisa.ResourceManager):
             print("Scope does not respond on IDN query. Please reboot scope")
             # self.instr.query("*WAI")
             quit(1)
+    def scope_close(self):
+        self.close()
 
     def get_data(self,ch):
         data = {}
@@ -70,7 +72,7 @@ class Scope(pyvisa.ResourceManager):
         self.instr.write(":ACQuire:AVERages 16")
         self.instr.write(":CHANnel1:BWLimit 20M")
         self.instr.write(":CHANnel2:BWLimit 20M")
-        self.instr.write(":ACQuire:MDEPth auto")
+        self.instr.write(":ACQuire:MDEPth 1M")
         # enabled=self.instr.query(":COUNter:ENABle?")
         self.instr.write(":COUNter:ENABle ON")
         self.instr.write(":COUNter:SOURce CHAN1")
