@@ -15,6 +15,9 @@ Since the harmonics typically lower at higher order (20dB/decade), a Bode plot m
 A pre-capture options lets you capture multiple times. Each capture should be driven with a different fundamental frequency
 to extend the frequency range. All captures will be plotted as a single Bode diagram.
 
+Feedback loop stability gain be measured using the command line --loopgain option.
+
+
 ## Example of measuring an audio amplifier
 
 * python dho-remote.py -i 192.168.1.8
@@ -26,6 +29,16 @@ to extend the frequency range. All captures will be plotted as a single Bode dia
 ## Example of measuring a crystal
 Watch this [youtube video](https://www.youtube.com/watch?v=M2XBamR0O_g) to see how you a crystal can be measured.
 
+## Loop gain analysis
+The stability of a linear negative feedback loop can be investigated by placing an injection transformer in the feedback path of the loop.
+The transformer is not very critical as long as it works around the frequency of interest. A typical control loop has
+a bandwidth between 100Hz and perhaps 100kHz. I salvaged a tiny audio transformer from an old transistor radio. 
+Put 1kHz on one winding and measure the other winding on CH2. If the transformer has one output with less windings, 
+use that to drive the control loop. My transformer showed -14.5dB gain (so 5:1 ratio) and worked upto about 2MHz when
+terminated with 150 Ohm.
+
+In this [youtube video](https://www.youtube.com/watch?v=Dlk0V3aPnzg) I give a demonstration and explain how to measure the
+transformer.
 
 # Plot navigation
 The plots are made with pyplot. After the zoom button is selected, keep the x or y key pressed to limit the zoom to

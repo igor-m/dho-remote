@@ -204,6 +204,7 @@ class ScopeUI(tk.Tk):
         Vrms1 = 2.0 / data["N"] * abs(fft_val1) / np.sqrt(2)
         Vrms2 = 2.0 / data["N"] * abs(fft_val2) / np.sqrt(2)
         if self.loopgain:
+            # Note the minus sign is left out such that 0 degrees reads as no margin.
             s21 = (fft_val1 / fft_val2)
         else:
             s21 = (fft_val2 / fft_val1)
@@ -276,9 +277,9 @@ class ScopeUI(tk.Tk):
             if np.where(bodedb < 0)[0].size:
                 bodedb_belowzero_index = np.where(bodedb < 0)[0][0]
                 belowzero_freq = xf[bodedb_belowzero_index]
-                print(f"Loopgain is below zero at {belowzero_freq:.0f} Hz")
+                print(f"Loop gain is below zero at {belowzero_freq:.0f} Hz")
                 belowzero_phase = bodephase[bodedb_belowzero_index]
-                print(f"Phase is  {belowzero_phase:.2f}")
+                print(f"Loop phase is  {belowzero_phase:.2f}")
                 self.warning["text"] = f"Ph margin {belowzero_phase:.2f}"
                 ax2b.annotate(f"PM={belowzero_phase:.1f}",xy=(belowzero_freq,belowzero_phase),
                               xytext=(belowzero_freq,belowzero_phase+20), arrowprops=dict(arrowstyle="->"))
@@ -308,7 +309,7 @@ class ScopeUI(tk.Tk):
         binwidth = data1["sr"] / data1["mdepth"]
         print(f'Sample rate={data["sr"] / 1e6:g} Ms')
         print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
-        print(f"Apply frequency below {binwidth} Hz")
+        print(f"NOTE: Apply frequency below {binwidth} Hz\n")
 
         self.data1 = []
         self.data2 = []
