@@ -1,4 +1,5 @@
 import time
+from time import sleep
 
 import pyvisa
 import numpy as np
@@ -11,7 +12,7 @@ class Scope(pyvisa.ResourceManager):
         super().__init__()
 
     def scope_init(self, ipaddress):
-        if self.debug == 2:
+        if self.demo and not self.demo == "save" :
             self.instr = False
             self.get_data = False
             return
@@ -102,11 +103,10 @@ class Scope(pyvisa.ResourceManager):
         htime=20e-3
         self.instr.write(f":TIMebase:SCALe {htime}")
         sr = float(self.instr.query(":ACQuire:SRATe?"))
+        sleep(1)
         mdepth = float(self.instr.query(":ACQuire:MDEPth?"))
         trace_time=mdepth/sr
-        while trace_time > 1/fch1 and htime >= 1e-6:
-            # print(f"Input period t={1/fch1}")
-            # print(f"lowest t={total_time}")
+        while trace_time > 15/fch1 and htime >= 1e-6:
             htime=float(self.instr.query(f":TIMebase:SCALe?"))
             htime=htime/2
             self.instr.write(f":TIMebase:SCALe {htime}")

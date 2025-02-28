@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import tkinter as tk
 import tkinter.ttk as ttk
 from scipy.signal.windows import flattop, blackman, hann, kaiser
@@ -11,7 +12,7 @@ import datetime
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.3"
+version = "v1.4"
 
 class ScopeUI(tk.Tk):
     # data1: np.array
@@ -20,6 +21,7 @@ class ScopeUI(tk.Tk):
     def __init__(self, rm):
         super().__init__()
         # self.geometry("240x200")
+        self.demo = None
         self.instr = rm.instr
         self.get_data = rm.get_data
         self.bode_setup = rm.bode_setup
@@ -158,8 +160,8 @@ class ScopeUI(tk.Tk):
 
     def plot_bode(self, pre_capture=False):
         instr = self.instr
-        if self.debug == 2:
-            with open("debug.bplt", "rb") as f:
+        if self.demo and not self.demo == "save" :
+            with open(self.demo, "rb") as f:
                 self.data1, self.data2 = pickle.load(f)
         else:
             instr.write(":STOP")
@@ -198,6 +200,7 @@ class ScopeUI(tk.Tk):
                 fft_val1 = fft1
                 fft_val2 = fft2
             else:
+                # select from the list of fft values the maximum
                 max_indices = np.argmax(np.abs(fft1), axis=0)
                 fft_val1 = fft1[max_indices, range(fft1.shape[1])]
                 fft_val2 = fft2[max_indices, range(fft2.shape[1])]
@@ -208,7 +211,6 @@ class ScopeUI(tk.Tk):
             s21 = (fft_val1 / fft_val2)
         else:
             s21 = (fft_val2 / fft_val1)
-        PhaseDiff = np.rad2deg(np.angle(s21))
 
         data1 = self.data1[0]
         data2 = self.data2[0]
@@ -232,15 +234,11 @@ class ScopeUI(tk.Tk):
         argmax = Vrms1.argmax()
         # Filter out the first 50 odd harmonics
         if argmax > 0 :
-            harm_no = 50
-            xmask_harmonics=np.ndarray.copy(xmask)
-            xmask_harmonics[:harm_no * argmax] = False
-            argmax_real = np.average(np.arange(argmax-1,argmax+2), weights=Vrms1[argmax-1:argmax+2])
-            xmask_harmonics[np.rint(np.arange(1, harm_no, 2) * (argmax_real + 1)).astype(np.int64) - 1] = True
-            # Make sure the harmonic are really above the threshold
-            xmask=np.logical_and(xmask, xmask_harmonics)
+            vd=np.diff(Vrms1)
+            max_indices=(vd[:-1]>0) & (vd[1:]<0)
+            max_indices=np.insert(max_indices,0,[False,False])
+            xmask[np.logical_not(max_indices)] = False
         else:
-            True
             xmask[1::2] = False
         # Try to estimate the real bin using the two neighbour bins
         # xmask=xmask_harmonics
@@ -259,11 +257,13 @@ class ScopeUI(tk.Tk):
         # if not hasattr(self, 'ax2b'):
         #     pass
         ax2b = ax[2].twinx()
+
+        PhaseDiff = np.rad2deg(np.angle(s21))
         bodephase = np.unwrap(PhaseDiff[xmask], period=360)
+
         ax[2].set_ylim([min(bodedb), max(bodedb)])
         ax2b.semilogx(xf, bodephase, "-", color='orange', zorder=1)
         ax[2].grid(True)
-        from matplotlib.ticker import MultipleLocator
         if max(bodephase) - min(bodephase) < 500:
             ax2b.yaxis.set_major_locator(MultipleLocator(45))
         if max(bodephase) - min(bodephase) < 90:
@@ -274,6 +274,7 @@ class ScopeUI(tk.Tk):
         ax[2].set_frame_on(False)
 
         if self.loopgain:
+            # Find the phase margin
             if np.where(bodedb < 0)[0].size:
                 bodedb_belowzero_index = np.where(bodedb < 0)[0][0]
                 belowzero_freq = xf[bodedb_belowzero_index]
@@ -298,7 +299,7 @@ class ScopeUI(tk.Tk):
 
         ax[1].grid(True)
 
-        if self.debug == 1:
+        if self.demo == "save":
             try:
                 date = datetime.datetime.now()
                 with open(date.strftime("%Y-%m-%d-%X.bplt"), "wb") as f:
@@ -309,11 +310,10 @@ class ScopeUI(tk.Tk):
         binwidth = data1["sr"] / data1["mdepth"]
         print(f'Sample rate={data["sr"] / 1e6:g} Ms')
         print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
-        print(f"NOTE: Apply frequency below {binwidth} Hz\n")
 
+        # clear the data since we are going to plot
         self.data1 = []
         self.data2 = []
-        # self.warning['text'] = f"OK"
         plt.show()
 
     def select_array(self, a, b, select):
@@ -402,8 +402,8 @@ class ScopeUI(tk.Tk):
         text["text"] = f"{scale}{scale_unit}"
 
     def plot_fft(self, ch):
-        if self.debug == 2:
-            with open("debug.bplt", "rb") as f:
+        if self.demo and not self.demo == "save":
+            with open(self.demo, "rb") as f:
                 self.data1, self.data2 = pickle.load(f)
                 if ch == 2 :
                     data=self.data2[0]
@@ -430,7 +430,6 @@ class ScopeUI(tk.Tk):
         noiseBW = 10 * np.log10(binwidth) + hann_nbw_correction_db
         print(f"FFT min freq={binwidth:g}Hz")
         print(f"FFT bin noise BW={noiseBW:.1f}db")
-        print_noise = True
         if data["bwl"] == '20M':
             if data["sr"] < 40e6:
                 print_noise = False
@@ -440,6 +439,7 @@ class ScopeUI(tk.Tk):
                 print_noise = False
                 print("Noise is not accurate due to noise folding, please increase sample rate or set BW to 20MHz!")
 
+        print_noise = True
         def moving_average(x, w):
             bmw = blackman(w)
             # noinspection PyTypeChecker
@@ -448,7 +448,7 @@ class ScopeUI(tk.Tk):
         xf, ywf = self.fft_trace(data,window=self.window_var.get())
         Vrms = 2.0 / data["N"] * abs(ywf) / np.sqrt(2)
         avg_size = min(500, int(data["N"] / 10))
-        print(f'Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"])}')
+        print(f'Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"]):.3g} V')
         Vavg = moving_average(Vrms ** 2, avg_size * 2)
         Vavg = (Vavg / avg_size / 2) ** 0.5
 
@@ -497,27 +497,32 @@ class ScopeUI(tk.Tk):
             print("Unknown window")
         # noinspection PyTypeChecker
         cpg = sum(win) / len(win)  # coherent power gain
-        # ywf = fft(data["y"] * win / cpg)
-        # xf = fftfreq(data["N"], data["xincr"])[:data["N"] // 2]
         y_windowed=data["y"] * win / cpg
-        y_windowed=y_windowed - np.mean(y_windowed)
         ywf = rfft(y_windowed)
         xf = rfftfreq(data["N"], data["xincr"])
         return xf[1:], ywf[1:]
 
     def save_data(self, ch, file=""):
-        self.instr.write(":STOP")
-        try:
-            data = self.get_data(ch)
-        except ValueError:
-            self.warning["text"] = f"Got no data from CH{ch}"
-            print("No data retrieved from scope")
-            return 1
-        except ChannelNotEnabled:
-            self.warning["text"] = f"Channel {ch} is not enabled"
-            print(f"Channel {ch} is not enabled")
-            return 1
-        self.instr.write(":RUN")
+        if self.demo and not self.demo == "save":
+            with open(self.demo, "rb") as f:
+                self.data1, self.data2 = pickle.load(f)
+                if ch == 2 :
+                    data=self.data2[0]
+                else:
+                    data=self.data1[0]
+        else:
+            self.instr.write(":STOP")
+            try:
+                data = self.get_data(ch)
+            except ValueError:
+                self.warning["text"] = f"Got no data from CH{ch}"
+                print("No data retrieved from scope")
+                return 1
+            except ChannelNotEnabled:
+                self.warning["text"] = f"Channel {ch} is not enabled"
+                print(f"Channel {ch} is not enabled")
+                return 1
+            self.instr.write(":RUN")
         csv_data = np.transpose(np.stack((data["x"], data["y"])))
         np.savetxt(f"CH{ch}.csv", csv_data, delimiter=',')
         self.warning["text"] = f"Saved to CH{ch}.csv"
@@ -535,7 +540,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--ip", default="192.168.1.8", help="IP or hostname of oscilloscope")
     parser.add_argument("-l", "--loopgain", action="store_true", help="For loopgain analysis")
     parser.add_argument("-m", "--scope_brand", default="rigol", help="scope brand")
-    parser.add_argument("-d", "--debug", choices=[0,1,2], type=int, help="0=no debug, 1=save data, 2=read data from debug.bplt")
+    parser.add_argument("-d", "--demo", help='"save" stores Bode data to <datetime>.bplt. To load specify <filename>.bplt')
     args = parser.parse_args()
     if args.scope_brand == "rigol":
         rm = Scope()
@@ -548,10 +553,10 @@ if __name__ == '__main__':
     if args.version:
         print(f"dho-remote {version}")
         quit(0)
-    rm.debug = args.debug
+    rm.demo = args.demo
     rm.scope_init(args.ip)
     ui = ScopeUI(rm)
-    ui.debug = args.debug
+    ui.demo = args.demo
     ui.loopgain = args.loopgain
     ui.mainloop()
     rm.close()

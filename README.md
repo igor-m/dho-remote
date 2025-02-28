@@ -15,7 +15,7 @@ Since the harmonics typically lower at higher order (20dB/decade), a Bode plot m
 A pre-capture options lets you capture multiple times. Each capture should be driven with a different fundamental frequency
 to extend the frequency range. All captures will be plotted as a single Bode diagram.
 
-Feedback loop stability gain be measured using the command line --loopgain option.
+Closed loop gain stability can be measured using the command line --loopgain option.
 
 
 ## Example of measuring an audio amplifier
@@ -64,11 +64,30 @@ ringing. The button "Setup scope" will setup the scope based on the detected sig
 The exact settings follows from f(min).
 
 Noise can be lowered by averaging on the oscilloscope. N=16 will give a 6dB lower noise floor.
+# Installation
+The program is written in Python3. Make sure you have Python and these packages installed:
+* pyvisa
+* pyvisa-py
+* numpy
+* matplotlib
+* scipy
+
+Alternative for a system wide installation is to create a virtual environment:
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+python dho-remote.py -h
 # Known issues
 Pre capture only extends the frequency range if the setting of the scope remains unchanged. If the horizontal timebase 
 is changed between captures, the result is wrong.
 
 # Update log
+* V1.4
+1. Harmonic filtering improved. Now only local maxima in the spectrum on CH1 are used.
+2. Auto setup now tries to set the timebase such that multiple periods are captured
+3. Demo mode added. No scope needed: python dho-remote.py -d examples/LRC.bplt
+4. Installation instruction added here. 
 * V1.3
 1. Loopgain analysis added (argument --loopgain)
 2. FFT window selection menu added
