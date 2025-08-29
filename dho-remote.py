@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+
+#  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+#  Modded by Igor-M aka iMo 2025/08/28 for Noise Measurements
+#  v 1.4_01
+#  more on eevblog:
+#  https://www.eevblog.com/forum/metrology/diy-low-frenquency-noise-meter/msg6023949/#msg6023949
+#  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -9,6 +18,7 @@ from scipy.fft import rfft, rfftfreq
 from functools import partial
 import pickle
 import datetime
+import time
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
@@ -150,6 +160,24 @@ class ScopeUI(tk.Tk):
         hframe.grid(row=0, column=1, sticky=tk.N)
         trigframe.grid(row=4, column=0)
         bodeframe.grid(row=1, column=1, rowspan=3, sticky=tk.W)
+        
+        #NEW IMO
+        
+        # FFT averaging (N measurements)
+        row = 7
+        self.nshots = tk.StringVar()
+        self.nshots.set("1")  # default = 1 measurement
+        ttk.Label(master=vframe, text="FFT Aver. Noise (N)").grid(column=1, row=row, columnspan=2, sticky=tk.W)
+        ttk.Entry(master=vframe, width=6, textvariable=self.nshots).grid(column=3, row=row, columnspan=2, sticky=tk.W)
+
+        # LNA Gain
+        row = 8
+        self.lna_gain = tk.StringVar()
+        self.lna_gain.set("1.0")  # default gain (dB)
+        ttk.Label(master=vframe, text="LNA Gain (A)").grid(column=1, row=row, columnspan=2, sticky=tk.W)
+        ttk.Entry(master=vframe, width=6, textvariable=self.lna_gain).grid(column=3, row=row, columnspan=2, sticky=tk.W)
+
+        # END NEW IMO
 
         self.warning = ttk.Label(text=version)
         self.warning.grid(row=4, column=1, sticky=tk.EW)
@@ -402,105 +430,196 @@ class ScopeUI(tk.Tk):
         text["text"] = f"{scale}{scale_unit}"
 
     def plot_fft(self, ch):
+        # === load or acquire data ===
         if self.demo and not self.demo == "save":
             with open(self.demo, "rb") as f:
                 self.data1, self.data2 = pickle.load(f)
-                if ch == 2 :
-                    data=self.data2[0]
-                else:
-                    data=self.data1[0]
+                data = self.data2[0] if ch == 2 else self.data1[0]
         else:
-            self.instr.write(":STOP")
-            try:
-                data = self.get_data(ch)
-            except ValueError:
-                self.warning["text"] = f"Got no data from CH{ch}"
-                print("No data retrieved from scope")
-                return 1
-            except ChannelNotEnabled:
-                self.warning["text"] = f"Channel {ch} is not enabled"
-                print(f"Channel {ch} is not enabled")
-                return 1
-            self.instr.write(":RUN")
+            # NEW IMO
+            Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
+            spectra = []
+            data = None
+            for i in range(Nfft):
+                self.instr.write(":SINGle")
+                print(f"N.{i+1} {Nfft} FFT from CH{ch} ..")
+                time.sleep(1)
+                # wait until acquisition complete
+                timeout = time.time() + 2000.0  # debug only: timeout per shot
+                while True:
+                    #time.sleep(1)
+                    status = self.instr.query(":TRIGger:STATus?").strip().upper()
+                    # DHO can answer RUN, AUTO, WAIT, TD, STOP
+                    if status in ("STOP"):
+                        print(f"N.{i+1} {Nfft} FFT DONE from CH{ch} !")
+                        break  # acquisition done
+                    if time.time() > timeout:
+                        print("Timeout waiting for single shot trigger, proceeding anyway.")
+                        break
+                #time.sleep(2)
+                
+                try:
+                    data = self.get_data(ch)
+                except (ValueError, ChannelNotEnabled):
+                    self.warning["text"] = f"No data from CH{ch}"
+                    print(f"No data retrieved from CH{ch}")
+                    return 1
+                
+                gain = float(self.lna_gain.get())   # linear gain (not dB!)
+                data["y"] = data["y"] / gain
+                xf, ywf_single, enbw = self.fft_trace(data, window=self.window_var.get())
+                spectra.append(np.abs(ywf_single) ** 2) 
+                
+            # average power spectrum
+            mean_power = np.mean(spectra, axis=0)
+            # convert back to magnitude (Vrms/bin)
+            ywf = np.sqrt(mean_power)
+            # END NEW IMO
+
+        print(f"Samples read: {Nfft} * {data['N']}")
         print(f'Sample rate={data["sr"] / 1e6:g} Ms')
-        print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
-        binwidth = data["sr"] / data["mdepth"]
-        # If the FFT has been windowed using Hanning the noise bandwidth needs to be corrected
-        hann_nbw_correction_db = np.log10(1.5)
-        noiseBW = 10 * np.log10(binwidth) + hann_nbw_correction_db
-        print(f"FFT min freq={binwidth:g}Hz")
-        print(f"FFT bin noise BW={noiseBW:.1f}db")
-        if data["bwl"] == '20M':
-            if data["sr"] < 40e6:
-                print_noise = False
-                print("Noise is not accurate due to noise folding, please increase sample rate!")
-        else:
-            if data["sr"] < 500e6:
-                print_noise = False
-                print("Noise is not accurate due to noise folding, please increase sample rate or set BW to 20MHz!")
+        print(f'FFT max freq={data["sr"] / 2e6:g} MHz')
+
+        # === RBW / ENBW / noise BW ===
+        binwidth = data["sr"] / data["mdepth"]     # Hz per FFT bin
+        # Determine ENBW depending on window
+        win_name = str(self.window_var.get()).lower()
+        # enbw = 1.5 if "hann" in win_name or "hanning" in win_name else 1.0
+        noiseBW_db = 10.0 * np.log10(binwidth * enbw)   # dB (10*log10 of the equivalent noise bandwidth)
+        print(f"FFT min freq={binwidth:g} Hz")
+        print(f"FFT bin noise BW={noiseBW_db:.2f} dB (includes ENBW={enbw})")
 
         print_noise = True
-        def moving_average(x, w):
-            bmw = blackman(w)
-            # noinspection PyTypeChecker
-            return np.convolve(x, bmw, 'same') / (sum(bmw) / len(bmw))
 
-        xf, ywf = self.fft_trace(data,window=self.window_var.get())
-        Vrms = 2.0 / data["N"] * abs(ywf) / np.sqrt(2)
-        avg_size = min(500, int(data["N"] / 10))
-        print(f'Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"]):.3g} V')
-        Vavg = moving_average(Vrms ** 2, avg_size * 2)
-        Vavg = (Vavg / avg_size / 2) ** 0.5
+        # === helper: weighted moving average of power (normalized) ===
+        def weighted_moving_avg_power(x, w):
+            if w <= 1:
+                return x
+            w = int(w)
+            win = np.blackman(w)
+            s = np.sum(win)
+            if s == 0:
+                return x
+            win = win / s
+            return np.convolve(x, win, mode='same')
 
-        fig, ax = plt.subplots(3, layout="constrained", figsize=(6, 10))
+        # === FFT trace & per-bin RMS voltage ===
+        #xf, ywf = self.fft_trace(data, window=self.window_var.get())  # xf in Hz, ywf complex
+        #Vrms = 2.0 / data["N"] * np.abs(ywf) / np.sqrt(2)              # V RMS per bin (raw bin RMS)
+        Vrms =  2.0 / data["N"] * (ywf)  / np.sqrt(2.0)              # V RMS per bin (raw bin RMS)
+
+        # smoothing window size (used only for smoothing the noise floor estimate)
+        # avg_size = min(500, max(1, int(data["N"] / 10)))
+
+        # local averaged power then sqrt -> smoothed Vrms (same length as Vrms)
+        # Vpower = Vrms ** 2
+        # Vpower_avg = weighted_moving_avg_power(Vpower, avg_size * 2)
+        Vavg = Vrms # np.sqrt(Vpower_avg)   # smoothed Vrms (V)
+
+        # === Noise Spectral Density (V/√Hz) and conversions ===
+        # NSD = Vavg / sqrt(binwidth * ENBW)
+        NSD_V_per_rtHz = Vavg / np.sqrt(binwidth * enbw)
+        NSD_uV_per_rtHz = NSD_V_per_rtHz * 1e6
+        # guard for log
+        tiny = 1e-30
+        NSD_dB_uV = 20.0 * np.log10(np.maximum(NSD_uV_per_rtHz, tiny))
+
+        # === Integrated RMS noise (from low freq up) ===
+        # power per bin = (NSD^2) * binwidth  -> sum -> sqrt -> Vrms
+        noise_power_per_bin = (NSD_V_per_rtHz ** 2) * binwidth
+        cumulative_power = np.cumsum(noise_power_per_bin)   # V^2
+        cumulative_rms = np.sqrt(cumulative_power)          # V
+        cumulative_rms_uV = cumulative_rms * 1e6            # µV RMS
+
+        # === thermal noise reference lines (50Ω at 25°C) ===
+        k = 1.380649e-23
+        T = 298.15
+        R = 50.0
+        thermal_v_oc = np.sqrt(4 * k * T * R)   # open-circuit V/√Hz (~0.9 nV/√Hz)
+        thermal_v_matched = thermal_v_oc / 2.0  # if source+load 50Ω matched (measured across load)
+        thermal_uV_oc = thermal_v_oc * 1e6
+        thermal_uV_matched = thermal_v_matched * 1e6
+        ref_line_open = np.full_like(xf, thermal_uV_oc)
+        ref_line_matched = np.full_like(xf, thermal_uV_matched)
+        ref_line_open_db = 20.0 * np.log10(np.maximum(ref_line_open, tiny))
+        ref_line_matched_db = 20.0 * np.log10(np.maximum(ref_line_matched, tiny))
+
+        # === choose start index for plotting: skip DC (index 0) but keep very low freqs ===
+        start_idx = 1 if len(xf) > 1 else 0
+
+        # === Plotting ===
+        fig, ax = plt.subplots(3, 1, figsize=(8, 11), layout="constrained")
+
+        # NSD in µV/√Hz (log-log axis)
         if print_noise:
-            ax[0].semilogy(xf, Vrms, self.vfg[ch],
-                           xf[avg_size:], (Vavg[avg_size:] / 10 ** (noiseBW / 20)))
+            ax[0].loglog(xf[start_idx:], NSD_uV_per_rtHz[start_idx:], label="Noise density [µV/√Hz]")
+            ax[0].plot(xf, ref_line_open, 'k--', label=f"Thermal (open) ≈ {thermal_uV_oc*1e3:.3f} nV/√Hz")
+            ax[0].plot(xf, ref_line_matched, 'r:', label=f"Thermal (matched) ≈ {thermal_uV_matched*1e3:.3f} nV/√Hz")
+            ax[0].legend(loc='lower left')
         else:
-            ax[0].semilogy(xf, Vrms, self.vfg[ch])
-        ax[0].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
-        ax[0].grid(True)
-        ax[0].set_xlabel("Freq F(Hz)")
-        ax[0].set_ylabel("V")
+            ax[0].plot(xf, ref_line_open, 'k--', label="Thermal reference")
+            ax[0].legend(loc='lower left')
+        ax[0].grid(True, which="both")
+        ax[0].set_xlabel("Frequency (Hz)")
+        ax[0].set_ylabel("µV/√Hz")
 
+        # NSD in dBµV/√Hz (semilog x)
         if print_noise:
-            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch],
-                           xf[avg_size:], 20 * np.log10(Vavg[avg_size:]) - noiseBW, marker="")
+            ax[1].semilogx(xf[start_idx:], NSD_dB_uV[start_idx:], label="Noise density [dBµV/√Hz]")
+            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (open) dBµV/√Hz")
+            ax[1].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
+            ax[1].legend(loc='lower left')
         else:
-            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch])
-        ax[1].grid(True)
-        ax[1].set_xlabel("Freq (Hz)")
-        ax[1].set_ylabel("dBV")
-        ax[1].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
+            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal reference dB")
+            ax[1].legend(loc='lower left')
+        ax[1].grid(True, which="both")
+        ax[1].set_xlabel("Frequency (Hz)")
+        ax[1].set_ylabel("dBµV/√Hz")
 
-        ax[2].plot(data["x"], data["y"], self.vfg[ch])
-        ax[2].grid(True)
-        ax[2].set_xlabel("time (s)")
-        ax[2].set_ylabel("V")
-        # plt.ion()
-        # plt.pause(.001)
+        # Integrated RMS noise in µV RMS vs frequency
+        ax[2].semilogx(xf[start_idx:], cumulative_rms_uV[start_idx:], label=f"Integrated Vrms CH{ch} (µV)")
+        # Also show theoretical integrated thermal noise for comparison:
+        # thermal power per bin = (v_oc^2) * binwidth  (open-circuit across resistor; if matched you'd halve appropriately)
+        thermal_power_per_bin_open = (thermal_v_oc ** 2) * binwidth
+        # cumulative thermal power up to each bin index
+        thermal_cum_power_open = thermal_power_per_bin_open * np.arange(1, len(xf) + 1)
+        thermal_cum_rms_open = np.sqrt(thermal_cum_power_open) * 1e6
+        ax[2].semilogx(xf[start_idx:], thermal_cum_rms_open[start_idx:], 'k--', label="Thermal integrated (open) µV RMS")
+        ax[2].grid(True, which="both")
+        ax[2].set_xlabel("Frequency (Hz)")
+        ax[2].set_ylabel("Integrated noise (µV RMS)")
+        ax[2].legend(loc='lower right')
+
         plt.show()
+
+
 
     def fft_trace(self, data, window="flat"):
         # 1kHz scope calibration is 3Vpp => db20(2*3/pi)=5.62dBVa and 2.62dBVrms
         if window == "flat" or window == "none":
             win = np.ones(data["N"])
+            enbw = 1.0
         elif window == "flattop":
             win = flattop(data["N"])
+            enbw = 3.77
         elif window == "blackman":
             win = blackman(data["N"])
+            enbw = 1.73
         elif window == "kaiser":
             win = kaiser(data["N"], beta=14)
+            enbw = 2.23
         elif window == "hann":
             win = hann(data["N"])
+            enbw = 1.5
         else:
             print("Unknown window")
-        # noinspection PyTypeChecker
+        # For tones only:
         cpg = sum(win) / len(win)  # coherent power gain
         y_windowed=data["y"] * win / cpg
+        # For FFT
         ywf = rfft(y_windowed)
         xf = rfftfreq(data["N"], data["xincr"])
-        return xf[1:], ywf[1:]
+        return xf[1:], ywf[1:], enbw
 
     def save_data(self, ch, file=""):
         if self.demo and not self.demo == "save":
