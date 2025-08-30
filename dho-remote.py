@@ -22,7 +22,7 @@ import time
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.4"
+version = "v1.4 _02 iMo"
 
 class ScopeUI(tk.Tk):
     # data1: np.array
@@ -48,139 +48,114 @@ class ScopeUI(tk.Tk):
         self.data2 = []
 
     def create_buttons(self):
-        # Vertical control colors
-        self.vfg = {}
-        # self.vfg[1] = "#fcfa23"  # yellow
-        self.vfg[1] = "gold"  # when on white background
-        self.vfg[2] = "#16f7fe"  # cyan
-        self.vfg[3] = "#fe02fe"  # magenta
-        self.vfg[4] = "#047efa"  # cyan-blue
-        self.bfg = {}
-        self.bfg[1] = "black"
-        self.bfg[2] = self.bfg[1]
-        self.bfg[3] = self.bfg[1]
-        self.bfg[4] = self.bfg[1]
-        self.vlabel = {}
-        self.vlabel_val = {}
-        vup = {}
-        vdown = {}
-        vframe = ttk.Labelframe(self, text="Vertical")
+        # --- Vertical controls ---
+        self.vfg = {1: "gold", 2: "#16f7fe", 3: "#fe02fe", 4: "#047efa"}
+        self.bfg = {1: "black", 2: "black", 3: "black", 4: "black"}
+        self.vlabel, self.vlabel_val = {}, {}
+        vup, vdown = {}, {}
+
+        vframe = ttk.Labelframe(self, text="Vertical/div / Channels")
+
         for ch in range(1, 5):
-            row = 0
-            self.vlabel[ch] = tk.Button(master=vframe, command=partial(self.vertical_toggle, ch), text=f"CH{ch}")
-            self.vlabel[ch]["fg"] = self.vfg[ch]
-            self.vlabel[ch]["bg"] = self.bfg[ch]
-            self.vlabel[ch].grid(column=ch, row=row)
-            row = 1
-            vup[ch] = tk.Button(master=vframe, command=partial(self.vertical, ch, True), text="^")
-            vup[ch].grid(column=ch, row=row)
-            vup[ch]["height"] = 1
-            vup[ch]["width"] = 3
-            row = 2
-            self.vlabel_val[ch] = tk.Label(master=vframe, width=5)
-            self.vlabel_val[ch].grid(column=ch, row=row)
-            self.vlabel_val[ch]["width"] = 5
-            # self.vlabel_val[ch].insert('1.0', "V/div")
-            # self.vlabel_val[ch].bind('<Return>', partial(self.ReturnPressed, ch))
-            row = 3
-            vdown[ch] = tk.Button(master=vframe, command=partial(self.vertical, ch, False), text="v")
-            vdown[ch].grid(column=ch, row=row)
-            vdown[ch]["width"] = vup[ch]["width"]
-            vdown[ch]["height"] = vup[ch]["height"]
+            # channel label button
+            self.vlabel[ch] = tk.Button(vframe, command=partial(self.vertical_toggle, ch), text=f"CH{ch}")
+            self.vlabel[ch].configure(fg=self.vfg[ch], bg=self.bfg[ch], width=6)
+            self.vlabel[ch].grid(column=ch, row=0, padx=2, pady=2)
+
+            # up button
+            vup[ch] = tk.Button(vframe, command=partial(self.vertical, ch, True), text="^", width=6)
+            vup[ch].grid(column=ch, row=1, padx=2, pady=2)
+
+            # label value
+            self.vlabel_val[ch] = tk.Label(vframe, width=6, anchor="center")
+            self.vlabel_val[ch].grid(column=ch, row=2, padx=2, pady=2)
+
+            # down button
+            vdown[ch] = tk.Button(vframe, command=partial(self.vertical, ch, False), text="v", width=6)
+            vdown[ch].grid(column=ch, row=3, padx=2, pady=2)
+
             self.vlabel_update(ch)
 
-            #fft
-            row = 4
-            fft_button = tk.Button(master=vframe, text="FFT", command=partial(self.plot_fft, ch))
-            fft_button.grid(column=ch, row=row)
-            fft_button["width"] = vup[ch]["width"]
+            # FFT + Save buttons
+            tk.Button(vframe, text="FFT", width=6, command=partial(self.plot_fft, ch)).grid(column=ch, row=4, padx=2, pady=2)
+            tk.Button(vframe, text="Save", width=6, command=partial(self.save_data, ch)).grid(column=ch, row=5, padx=2, pady=2)
 
-            #save
-            row = 5
-            data_save = tk.Button(master=vframe, text="Save", command=partial(self.save_data, ch))
-            data_save.grid(column=ch, row=row)
-            data_save["width"] = vup[ch]["width"]
+        # --- Noise analysis frame (FFT window + averaging + gain + filters) ---
+        noise_frame = ttk.Labelframe(self, text="Noise Analysis")
 
-            # FFT window
-            row =6
-            paddings = {'padx': 5, 'pady': 5}
-            label = ttk.Label(master=vframe, text='FFT window:')
-            label.grid(column=1, row=row, columnspan=2, sticky=tk.W, **paddings)
-            window_list = ['none', "flattop", "blackman", "hann", "kaiser"]
-            self.window_var = tk.StringVar()
-            self.window_var.set(window_list[4])
-            fft_window = tk.OptionMenu(vframe, self.window_var,*window_list )
-            fft_window.grid(column=3, row=row, columnspan=2, sticky=tk.W)
+        row = 0
+        window_list = ["FlatTop", "Blackman", "Hann", "Kaiser", "None"]
+        self.window_var = tk.StringVar(value="None")  # default
+        ttk.Label(noise_frame, text="FFT window:").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.OptionMenu(noise_frame, self.window_var, self.window_var.get(), *window_list).grid(
+            column=1, row=row, sticky=tk.W, padx=5, pady=2
+)
+        
+        row = 1
+        self.nshots = tk.StringVar(value="1")
+        ttk.Label(noise_frame, text="FFT Averaging (N):").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.Entry(noise_frame, width=12, textvariable=self.nshots).grid(column=1, row=row, padx=5, pady=2)
 
-        # Horizontal controls
-        hframe = ttk.Labelframe(self, text="Horizontal")
-        hup = tk.Button(master=hframe, command=partial(self.horizontal, True), width=3, text="<")
-        hup.grid(column=0, row=0)
-        self.hlabel_val = tk.Label(master=hframe, height=1, width=5)
-        self.hlabel_val.grid(column=1, row=0)
-        # self.hlabel_val.insert('1.0', "s/div")
-        hdown = tk.Button(master=hframe, command=partial(self.horizontal, False), width=3, text=">")
-        hdown.grid(column=2, row=0)
+        row = 2
+        self.lna_gain = tk.StringVar(value="10000")
+        ttk.Label(noise_frame, text="LNA Gain (A):").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.Entry(noise_frame, width=12, textvariable=self.lna_gain).grid(column=1, row=row, padx=5, pady=2)
+
+        row = 3
+        self.filter_from = tk.StringVar(value="0.1")
+        ttk.Label(noise_frame, text="LNA Filter from (Hz):").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.Entry(noise_frame, width=12, textvariable=self.filter_from).grid(column=1, row=row, padx=5, pady=2)
+
+        row = 4
+        self.filter_to = tk.StringVar(value="10")
+        ttk.Label(noise_frame, text="LNA Filter to (Hz):").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.Entry(noise_frame, width=12, textvariable=self.filter_to).grid(column=1, row=row, padx=5, pady=2)
+
+        # --- Horizontal controls ---
+        hframe = ttk.Labelframe(self, text="Horizontal/div")
+        tk.Button(hframe, command=partial(self.horizontal, True), width=3, text="<").grid(column=0, row=0, padx=2, pady=2)
+        self.hlabel_val = tk.Label(hframe, width=6)
+        self.hlabel_val.grid(column=1, row=0, padx=2, pady=2)
+        tk.Button(hframe, command=partial(self.horizontal, False), width=3, text=">").grid(column=2, row=0, padx=2, pady=2)
         self.hlabel_update()
 
-        # Trigger controls
+        # --- Trigger controls ---
         trigframe = ttk.Labelframe(self, text="Trigger")
         triggersource = tk.StringVar()
         for ch in range(1, 5):
-            rb = ttk.Radiobutton(master=trigframe, text=f"CH{ch}", value=f"CH{ch}", variable=triggersource)
-            rb['command'] = partial(self.setTriggerSource, ch)
-            rb.grid(row=1, column=ch, sticky=tk.W)
+            rb = ttk.Radiobutton(trigframe, text=f"CH{ch}", value=f"CH{ch}", variable=triggersource,
+                                 command=partial(self.setTriggerSource, ch))
+            rb.grid(row=1, column=ch, sticky=tk.W, padx=2, pady=2)
         triggeredge = tk.StringVar()
-        rb = ttk.Radiobutton(master=trigframe, text="Rising", value="POS", variable=triggeredge)
-        rb['command'] = partial(self.setTriggeredge, "POS")
-        rb.grid(row=2, column=1, sticky=tk.W)
-        rb = ttk.Radiobutton(master=trigframe, text="Falling", value="NEG", variable=triggeredge)
-        rb['command'] = partial(self.setTriggeredge, "NEG")
-        rb.grid(row=2, column=2, sticky=tk.W)
+        ttk.Radiobutton(trigframe, text="Rising", value="POS", variable=triggeredge,
+                        command=partial(self.setTriggeredge, "POS")).grid(row=2, column=1, sticky=tk.W, padx=2, pady=2)
+        ttk.Radiobutton(trigframe, text="Falling", value="NEG", variable=triggeredge,
+                        command=partial(self.setTriggeredge, "NEG")).grid(row=2, column=2, sticky=tk.W, padx=2, pady=2)
 
-        #Bode plot
+        # --- Bode plot controls ---
         bodeframe = ttk.Labelframe(self, text="Bodeplot")
-        ttk.Button(master=bodeframe, text="Bode Plot", command=partial(self.plot_bode)).grid(row=0, column=0,columnspan=2)
-        ttk.Button(master=bodeframe, text="Pre capture", command=partial(self.plot_bode, pre_capture=True)).grid(row=1,column=0,columnspan=2)
-        self.bodefmin = tk.StringVar()
-        self.bodefmin.set("1")
-        self.bodefmax = tk.StringVar()
-        self.bodefmax.set("1e8")
-        ttk.Label(master=bodeframe, text="Frequency range").grid(row=2, column=0, columnspan=2)
-        ttk.Entry(master=bodeframe, width=6, textvariable=self.bodefmin).grid(row=3, column=0)
-        ttk.Entry(master=bodeframe, width=6, textvariable=self.bodefmax).grid(row=3, column=1)
-        ttk.Button(master=bodeframe, text="Setup scope", command=partial(self.bode_setup)).grid(row=4,column=0,columnspan=2)
+        ttk.Button(bodeframe, text="Bode Plot", command=partial(self.plot_bode)).grid(row=0, column=0, columnspan=2, pady=2)
+        ttk.Button(bodeframe, text="Pre capture", command=partial(self.plot_bode, pre_capture=True)).grid(row=1, column=0, columnspan=2, pady=2)
+        self.bodefmin, self.bodefmax = tk.StringVar(value="1"), tk.StringVar(value="1e8")
+        ttk.Label(bodeframe, text="Frequency range").grid(row=2, column=0, columnspan=2, pady=2)
+        ttk.Entry(bodeframe, width=6, textvariable=self.bodefmin).grid(row=3, column=0, pady=2)
+        ttk.Entry(bodeframe, width=6, textvariable=self.bodefmax).grid(row=3, column=1, pady=2)
+        ttk.Button(bodeframe, text="Setup scope", command=partial(self.bode_setup)).grid(row=4, column=0, columnspan=2, pady=2)
+        self.ampfilter = tk.StringVar(value="60")
+        ttk.Label(bodeframe, text="dB below 0dBfs").grid(row=5, column=0, columnspan=2, pady=2)
+        ttk.Entry(bodeframe, width=5, textvariable=self.ampfilter).grid(row=6, column=0, pady=2)
 
-        self.ampfilter = tk.StringVar()
-        self.ampfilter.set("60")
-        ttk.Label(master=bodeframe, text="dB below 0dBfs").grid(row=5, column=0, columnspan=2)
-        ttk.Entry(master=bodeframe, width=5, textvariable=self.ampfilter).grid(row=6, column=0)
+        # --- Layout placement ---
+        vframe.grid(row=0, column=0, rowspan=3, sticky=tk.N, padx=5, pady=5)
+        noise_frame.grid(row=3, column=0, sticky=tk.EW, padx=5, pady=5)
+        hframe.grid(row=0, column=1, sticky=tk.N, padx=5, pady=5)
+        trigframe.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
+        bodeframe.grid(row=2, column=1, rowspan=2, sticky=tk.W, padx=5, pady=5)
 
-        vframe.grid(row=0, column=0, rowspan=3, sticky=tk.N)
-        hframe.grid(row=0, column=1, sticky=tk.N)
-        trigframe.grid(row=4, column=0)
-        bodeframe.grid(row=1, column=1, rowspan=3, sticky=tk.W)
-        
-        #NEW IMO
-        
-        # FFT averaging (N measurements)
-        row = 7
-        self.nshots = tk.StringVar()
-        self.nshots.set("1")  # default = 1 measurement
-        ttk.Label(master=vframe, text="FFT Aver. Noise (N)").grid(column=1, row=row, columnspan=2, sticky=tk.W)
-        ttk.Entry(master=vframe, width=6, textvariable=self.nshots).grid(column=3, row=row, columnspan=2, sticky=tk.W)
-
-        # LNA Gain
-        row = 8
-        self.lna_gain = tk.StringVar()
-        self.lna_gain.set("1.0")  # default gain (dB)
-        ttk.Label(master=vframe, text="LNA Gain (A)").grid(column=1, row=row, columnspan=2, sticky=tk.W)
-        ttk.Entry(master=vframe, width=6, textvariable=self.lna_gain).grid(column=3, row=row, columnspan=2, sticky=tk.W)
-
-        # END NEW IMO
-
+        # --- Version / warning label ---
         self.warning = ttk.Label(text=version)
-        self.warning.grid(row=4, column=1, sticky=tk.EW)
+        self.warning.grid(row=4, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=5)
+
 
     # def ReturnPressed(self, ch, event):
     #     text = self.vlabel_val[ch]
@@ -442,21 +417,19 @@ class ScopeUI(tk.Tk):
             data = None
             for i in range(Nfft):
                 self.instr.write(":SINGle")
-                print(f"N.{i+1} {Nfft} FFT from CH{ch} ..")
-                time.sleep(1)
+                print(f"N.{i+1} ({Nfft}) FFTs from CH{ch} ..")
                 # wait until acquisition complete
-                timeout = time.time() + 2000.0  # debug only: timeout per shot
+                timeout = time.time() + 2200.0  # debug only: timeout per shot in seconds
                 while True:
-                    #time.sleep(1)
+                    time.sleep(1)
                     status = self.instr.query(":TRIGger:STATus?").strip().upper()
                     # DHO can answer RUN, AUTO, WAIT, TD, STOP
                     if status in ("STOP"):
-                        print(f"N.{i+1} {Nfft} FFT DONE from CH{ch} !")
+                        print(f"N.{i+1} FFT DONE from CH{ch} !")
                         break  # acquisition done
                     if time.time() > timeout:
                         print("Timeout waiting for single shot trigger, proceeding anyway.")
                         break
-                #time.sleep(2)
                 
                 try:
                     data = self.get_data(ch)
@@ -530,6 +503,47 @@ class ScopeUI(tk.Tk):
         cumulative_power = np.cumsum(noise_power_per_bin)   # V^2
         cumulative_rms = np.sqrt(cumulative_power)          # V
         cumulative_rms_uV = cumulative_rms * 1e6            # µV RMS
+        
+                # === Filtered integration and slope ===
+        fmin = float(self.filter_from.get())
+        fmax = float(self.filter_to.get())
+
+        mask = (xf >= fmin) & (xf <= fmax)
+
+        if np.any(mask):
+            # Integrated Vrms in the band
+            noise_power_band = (NSD_V_per_rtHz[mask] ** 2) * binwidth
+            Vrms_band = np.sqrt(np.sum(noise_power_band)) * 1e6  # µV
+
+            print(f"Integrated Vrms from {fmin:g} Hz to {fmax:g} Hz: {Vrms_band:.3f} µV")
+
+            # Linear fit slope of NSD in dBµV/√Hz vs log10(f)
+            freqs_log = np.log10(xf[mask])
+            nsd_db = NSD_dB_uV[mask]
+            slope, intercept = np.polyfit(freqs_log, nsd_db, 1)
+            
+            alpha = -slope / 10.0
+
+            print(f"NSD slope between {fmin:g}–{fmax:g} Hz: {slope:.3f} dB/decade")
+            print(f"Equivalent 1/f^alpha exponent: alpha = {alpha:.3f}")
+            
+            if abs(alpha) < 0.2:
+                noise_type = "White (thermal/shot)"
+            elif 0.8 <= alpha <= 1.2:
+                noise_type = "Flicker (1/f)"
+            elif 1.8 <= alpha <= 2.2:
+                noise_type = "Random walk (1/f²)"
+            elif 2.8 <= alpha <= 3.2:
+                noise_type = "Black (1/f³)"
+            else:
+                noise_type = f"Unclassified (α ≈ {alpha:.2f})"
+    
+            print(f"Estimated noise type: {noise_type}")
+
+        else:
+            print(f"No data points in selected filter range {fmin}–{fmax} Hz")
+            
+
 
         # === thermal noise reference lines (50Ω at 25°C) ===
         k = 1.380649e-23
@@ -545,14 +559,16 @@ class ScopeUI(tk.Tk):
         ref_line_matched_db = 20.0 * np.log10(np.maximum(ref_line_matched, tiny))
 
         # === choose start index for plotting: skip DC (index 0) but keep very low freqs ===
-        start_idx = 1 if len(xf) > 1 else 0
+        #start_idx = 1 if len(xf) > 1 else 0
+        start_idx = 0
+        stop_idx = len(xf) - 1
 
         # === Plotting ===
         fig, ax = plt.subplots(3, 1, figsize=(8, 11), layout="constrained")
 
         # NSD in µV/√Hz (log-log axis)
         if print_noise:
-            ax[0].loglog(xf[start_idx:], NSD_uV_per_rtHz[start_idx:], label="Noise density [µV/√Hz]")
+            ax[0].loglog(xf[start_idx:stop_idx], NSD_uV_per_rtHz[start_idx:stop_idx], label="Noise density [µV/√Hz]")
             ax[0].plot(xf, ref_line_open, 'k--', label=f"Thermal (open) ≈ {thermal_uV_oc*1e3:.3f} nV/√Hz")
             ax[0].plot(xf, ref_line_matched, 'r:', label=f"Thermal (matched) ≈ {thermal_uV_matched*1e3:.3f} nV/√Hz")
             ax[0].legend(loc='lower left')
@@ -565,7 +581,7 @@ class ScopeUI(tk.Tk):
 
         # NSD in dBµV/√Hz (semilog x)
         if print_noise:
-            ax[1].semilogx(xf[start_idx:], NSD_dB_uV[start_idx:], label="Noise density [dBµV/√Hz]")
+            ax[1].semilogx(xf[start_idx:stop_idx], NSD_dB_uV[start_idx:stop_idx], label="Noise density [dBµV/√Hz]")
             ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (open) dBµV/√Hz")
             ax[1].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
             ax[1].legend(loc='lower left')
@@ -596,19 +612,19 @@ class ScopeUI(tk.Tk):
 
     def fft_trace(self, data, window="flat"):
         # 1kHz scope calibration is 3Vpp => db20(2*3/pi)=5.62dBVa and 2.62dBVrms
-        if window == "flat" or window == "none":
+        if window == "None":
             win = np.ones(data["N"])
             enbw = 1.0
-        elif window == "flattop":
+        elif window == "FlatTop":
             win = flattop(data["N"])
             enbw = 3.77
-        elif window == "blackman":
+        elif window == "Blackman":
             win = blackman(data["N"])
             enbw = 1.73
-        elif window == "kaiser":
+        elif window == "Kaiser":
             win = kaiser(data["N"], beta=14)
             enbw = 2.23
-        elif window == "hann":
+        elif window == "Hann":
             win = hann(data["N"])
             enbw = 1.5
         else:
