@@ -491,12 +491,9 @@ class ScopeUI(tk.Tk):
         # NSD = Vavg / sqrt(binwidth * ENBW)
         NSD_V_per_rtHz = Vrms / np.sqrt(binwidth * wenbw)
         NSD_uV_per_rtHz = NSD_V_per_rtHz * 1e6
-        PSD_uV2_per_Hz = NSD_uV_per_rtHz ** 2.0
         # guard for log
         tiny = 1e-30
         NSD_dB_uV = 20.0 * np.log10(np.maximum(NSD_uV_per_rtHz, tiny))
-        
-        PSD_dB_uV = 20.0 * np.log10(np.maximum(PSD_uV2_per_Hz, tiny))
 
 
         # === Integrated RMS noise (from low freq up) ===
@@ -543,29 +540,28 @@ class ScopeUI(tk.Tk):
 
             print(f"Integrated Vrms from {fmin:g} Hz to {fmax:g} Hz: {Vrms_band:.3f} µV")
 
-            # Linear fit slope of PSD in db µV^2/Hz vs log10(f)
+            # Linear fit slope of PSD = NSD**2 in µV^2/Hz vs log10(f)
             freqs_log = np.log10(xf[mask])
-            #nsd_db = NSD_dB_uV[mask]
-            psd = PSD_dB_uV[mask]
-            slope, intercept = np.polyfit(freqs_log, psd, 1)
+            nsd_db = NSD_dB_uV[mask]
+            slope, intercept = np.polyfit(freqs_log, nsd_db*2, 1)
             
-            alpha = - slope / 10.0
+            alpha = -slope / 10.0
 
-            print(f"PSD slope between {fmin:g}–{fmax:g} Hz: {slope:.3f} uV^2/Hz per decade")
+            print(f"PSD slope between {fmin:g}–{fmax:g} Hz: {slope:.3f} dB/decade")
             #print(f"Equivalent 1/f^alpha exponent: alpha = {alpha:.3f}")
             
             if abs(alpha) < 0.2:
-                noise_type = "White (thermal/shot)"
-            elif 0.5 <= alpha <= 1.2:
+                noise_type = "White (Thermal/shot)"
+            elif 0.8 <= alpha <= 1.2:
                 noise_type = "Flicker (1/f)"
             elif 1.8 <= alpha <= 2.2:
                 noise_type = "Random walk (1/f²)"
             elif 2.8 <= alpha <= 3.2:
                 noise_type = "Black (1/f³)"
             else:
-                noise_type = f"Unclassified (α ≈ {alpha:.2f})"
+                noise_type = f"Unclassified (α ≈ {alpha:.3f})"
     
-            print(f"Est. noise type α ≈ {-alpha:.2f}: {noise_type}")
+            print(f"Est. noise type (α ≈ {alpha:.3f}): {noise_type}")
 
         else:
             print(f"No data points in selected filter range {fmin}–{fmax} Hz")
@@ -584,8 +580,6 @@ class ScopeUI(tk.Tk):
         ref_line_matched = np.full_like(xf, thermal_uV_matched)
         ref_line_open_db = 20.0 * np.log10(np.maximum(ref_line_open, tiny))
         ref_line_matched_db = 20.0 * np.log10(np.maximum(ref_line_matched, tiny))
-        ref_line_open_pow = np.full_like(xf, thermal_uV_oc**2)
-        ref_line_matched_pow = np.full_like(xf, thermal_uV_matched**2)
 
         # === choose start index for plotting: skip DC (index 0) but keep very low freqs ===
         #start_idx = 1 if len(xf) > 1 else 0
@@ -593,7 +587,7 @@ class ScopeUI(tk.Tk):
         stop_idx = len(xf) - 1
 
         # === Plotting ===
-        fig, ax = plt.subplots(4, 1, figsize=(8, 11), layout="constrained")
+        fig, ax = plt.subplots(3, 1, figsize=(8, 11), layout="constrained")
 
         # NSD in µV/√Hz (log-log axis)
         if print_noise:
@@ -607,46 +601,33 @@ class ScopeUI(tk.Tk):
         ax[0].grid(True, which="both")
         ax[0].set_xlabel("Frequency (Hz)")
         ax[0].set_ylabel("µV/√Hz")
-        
-        # PSD in µV^2/Hz (log-log axis)
-        if print_noise:
-            ax[1].loglog(xf[start_idx:stop_idx], PSD_uV2_per_Hz[start_idx:stop_idx], label="Power density [µV^2/Hz]")
-            ax[1].plot(xf, ref_line_open_pow, 'k--', label=f"Thermal (open) ≈ {(thermal_uV_oc*1e3)**2:.3f} nV^2/Hz")
-            ax[1].plot(xf, ref_line_matched_pow, 'r:', label=f"Thermal (matched) ≈ {(thermal_uV_matched*1e3)**2:.3f} nV^2/Hz")
-            ax[1].legend(loc='lower left')
-        else:
-            ax[1].plot(xf, ref_line_open, 'k--', label="Thermal reference")
-            ax[1].legend(loc='lower left')
-        ax[1].grid(True, which="both")
-        ax[1].set_xlabel("Frequency (Hz)")
-        ax[1].set_ylabel("µV^2/Hz")
 
         # NSD in dBµV/√Hz (semilog x)
         if print_noise:
-            ax[2].semilogx(xf[start_idx:stop_idx], NSD_dB_uV[start_idx:stop_idx], label="Noise density [dBµV/√Hz]")
-            ax[2].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (open) dBµV/√Hz")
-            ax[2].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
-            ax[2].legend(loc='lower left')
+            ax[1].semilogx(xf[start_idx:stop_idx], NSD_dB_uV[start_idx:stop_idx], label="Noise density [dBµV/√Hz]")
+            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (open) dBµV/√Hz")
+            ax[1].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
+            ax[1].legend(loc='lower left')
         else:
-            ax[2].semilogx(xf, ref_line_open_db, 'k--', label="Thermal reference dB")
-            ax[2].legend(loc='lower left')
-        ax[2].grid(True, which="both")
-        ax[2].set_xlabel("Frequency (Hz)")
-        ax[2].set_ylabel("dBµV/√Hz")
+            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal reference dB")
+            ax[1].legend(loc='lower left')
+        ax[1].grid(True, which="both")
+        ax[1].set_xlabel("Frequency (Hz)")
+        ax[1].set_ylabel("dBµV/√Hz")
 
         # Integrated RMS noise in µV RMS vs frequency
-        ax[3].semilogx(xf[start_idx:], cumulative_rms_uV[start_idx:], label=f"Integrated Vrms CH{ch} (µV)")
+        ax[2].semilogx(xf[start_idx:], cumulative_rms_uV[start_idx:], label=f"Integrated Vrms CH{ch} (µV)")
         # Also show theoretical integrated thermal noise for comparison:
         # thermal power per bin = (v_oc^2) * binwidth  (open-circuit across resistor; if matched you'd halve appropriately)
         thermal_power_per_bin_open = (thermal_v_oc ** 2) * binwidth
         # cumulative thermal power up to each bin index
         thermal_cum_power_open = thermal_power_per_bin_open * np.arange(1, len(xf) + 1)
         thermal_cum_rms_open = np.sqrt(thermal_cum_power_open) * 1e6
-        ax[3].semilogx(xf[start_idx:], thermal_cum_rms_open[start_idx:], 'k--', label="Thermal integrated (open) µV RMS")
-        ax[3].grid(True, which="both")
-        ax[3].set_xlabel("Frequency (Hz)")
-        ax[3].set_ylabel("Integrated noise (µV RMS)")
-        ax[3].legend(loc='lower right')
+        ax[2].semilogx(xf[start_idx:], thermal_cum_rms_open[start_idx:], 'k--', label="Thermal integrated (open) µV RMS")
+        ax[2].grid(True, which="both")
+        ax[2].set_xlabel("Frequency (Hz)")
+        ax[2].set_ylabel("Integrated noise (µV RMS)")
+        ax[2].legend(loc='lower right')
 
         plt.show()
 
