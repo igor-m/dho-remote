@@ -2,14 +2,14 @@
 
 #  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Modded by Igor-M aka iMo 2025/08/28 for Noise Analysis
-#  v 1.5 MOD_05
+#  v 1.5 MOD_06
 #  31st August 2025
 #  https://github.com/igor-m/dho-remote
 #  more on eevblog:
-#  https://www.eevblog.com/forum/metrology/diy-low-frenquency-noise-meter/msg6023949/#msg6023949
+#  https://www.eevblog.com/forum/metrology/simple-noise-analyser-for-scope-owners-who-do-not-have-that-option/msg6028551/#msg6028551
 #  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
-
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -19,12 +19,12 @@ from scipy.signal.windows import flattop, blackman, hann, kaiser
 from scipy.fft import rfft, rfftfreq
 from functools import partial
 import pickle
-import datetime
+from datetime import datetime
 import time
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.5 Mod_05 by Igor-M 09/2025"
+version = "v1.5 Mod_06 by Igor-M 09/2025"
 
 class ScopeUI(tk.Tk):
     # data1: np.array
@@ -116,11 +116,18 @@ class ScopeUI(tk.Tk):
 
         # LNA Filter Shape Factor
         # Filter Order selector
-        row = row + 1
+        row = 5
         order_list = ["2", "2.5", "3", "3.5", "4", "4.5", "5", "5.5", "6", "6.5", "7", "7.5", "8" ]
         self.filter_order = tk.StringVar(value=order_list[2])  # default = 4th
         ttk.Label(noise_frame, text="Eff. Filter Order HP+LP:").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
         ttk.OptionMenu(noise_frame, self.filter_order, self.filter_order.get(), *order_list).grid(column=1, row=row, sticky=tk.W, padx=5, pady=2)
+
+        # Measurement ID name for saving data
+        row = 6
+        self.meas_id = tk.StringVar()
+        self.meas_id.set("DUT#1")  # default ID
+        ttk.Label(master=noise_frame, text="Measurement ID:").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
+        ttk.Entry(master=noise_frame, width=16, textvariable=self.meas_id).grid(column=1, row=row, sticky=tk.W, padx=5, pady=2)
 
 
         # --- Horizontal controls ---
@@ -501,6 +508,10 @@ class ScopeUI(tk.Tk):
     def plot_fftN(self, ch):
         # === acquire data ===
         # NEW Igor_M
+        # Ensure Noise_Measurements folder exists
+        self.save_dir = os.path.join(os.getcwd(), "Noise_Measurements")
+        os.makedirs(self.save_dir, exist_ok=True)
+        
         Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
         spectra = []
         data = None
@@ -529,6 +540,23 @@ class ScopeUI(tk.Tk):
                 return 1
             
             self.instr.write(":RUN")
+            
+            # Save current data with name Measurement_ID and timestamp
+            meas_id_name = self.meas_id.get().strip().replace(" ", "_")
+            # Timestamp with milliseconds
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
+            # Filename in Noise_Measurements folder
+            filename = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.csv")
+
+            # Save data
+            csv_data = np.transpose(np.stack((data["x"], data["y"])))
+            np.savetxt(filename, csv_data, delimiter=',')
+            rel_path = os.path.relpath(filename, start=os.getcwd())
+            self.warning["text"] = f"Saved to {rel_path}"
+            print(f"Saved data to {rel_path}")
+            
+            
+            
             gain = float(self.lna_gain.get())   # linear gain (not dB!)
             data["y"] = data["y"] / gain
             xf, ywf_single, wenbw = self.fft_traceN(data, window=self.window_var.get())
@@ -769,7 +797,7 @@ class ScopeUI(tk.Tk):
             self.instr.write(":RUN")
         # Modded by Igor-M 08/2025            
         # Create timestamp string
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
         filename = f"CH{ch}_{timestamp}.csv"
         csv_data = np.transpose(np.stack((data["x"], data["y"])))
         np.savetxt(filename, csv_data, delimiter=',')
