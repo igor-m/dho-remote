@@ -21,7 +21,7 @@ LNA Filter from (Hz):      the HPF's -3db corner frequency, like 0.1
 
 LNA Filter to (Hz):        the LPF"s -3dB corner frequency, like 10
 
-Eff. Filter Order HP+LP:   this might be a controversal topic.. 
+Eff. Filter Order HP+LP:   this might be a controversial topic.. 
 
     It is the "sum" of HPF and LFP orders, like 2+2=4..
     Based on that you get aprox Shape Factor of the by HPF and LPF Bandpass. 
