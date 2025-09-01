@@ -1,5 +1,6 @@
 # dho-remote
 Control your digital oscilloscope remotely. Create FFT and Bode and Noise Analysis plots and save raw data.
+************************************************************************************************************
 
 I spent a couple of days with implementing a simple "Noise Analysis" into this tool and here you are:
 It works under Win11 as well as under Linux (ie. Armbian in a cheapo TvBox).
