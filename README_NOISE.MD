@@ -46,7 +46,7 @@ Sample rate=2500 ksps
 FFT max freq=1250 kHz
 FFT min freq=0.1 Hz
 FFT bin ENBW=-10.00 dB-Hz
-Integrated Vrms from 0.1 Hz to 10 Hz: 0.520 µV
+Integrated Vrms from 0.1 Hz to 10 Hz: 0.520 µV 
 PSD slope between 0.1–10 Hz: -8.916 dB/decade
 Est. Noise type (a ˜ 0.89): Flicker
 ..
