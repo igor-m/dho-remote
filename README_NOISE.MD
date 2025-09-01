@@ -37,6 +37,7 @@ Also mind the "Save" button saves the "actual scope's samples buffer" into a .cs
 
 The Noise Analysis outputs graphs and an info into the command line, like:
 
+```
 ..
 N.9 FFT DONE from CH1 !
 N.10 (10) FFT from CH1 ..
@@ -50,6 +51,7 @@ Integrated Vrms from 0.1 Hz to 10 Hz: 0.520 µV
 PSD slope between 0.1–10 Hz: -8.916 dB/decade
 Est. Noise type (a ˜ 0.89): Flicker
 ..
+```
 
 The alpha (in the 1/f^alpha) is calculated via PSD as the slope of lin. interpolation inside the Bandpass.
 So -10dB via a frequency decade gives you slope = -1.0, and the alpha = 1.0.
