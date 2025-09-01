@@ -3,7 +3,7 @@
 #  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Modded by Igor-M aka iMo 2025/08/28 for Noise Analysis
 #  v 1.5 MOD_06
-#  31st August 2025
+#  31st August 2025 
 #  https://github.com/igor-m/dho-remote
 #  more on eevblog:
 #  https://www.eevblog.com/forum/metrology/simple-noise-analyser-for-scope-owners-who-do-not-have-that-option/msg6028551/#msg6028551
