@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 #  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-#  Modded by Igor-M aka iMo 2025/08/28 for Noise Measurements
-#  v 1.4_01
+#  Modded by Igor-M aka iMo 2025/08/28 for Noise Analysis
+#  v 1.5 MOD_05
+#  31st August 2025
+#  https://github.com/igor-m/dho-remote
 #  more on eevblog:
 #  https://www.eevblog.com/forum/metrology/diy-low-frenquency-noise-meter/msg6023949/#msg6023949
 #  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
@@ -22,7 +24,7 @@ import time
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.4 Mod_03 by iMo 8/2025"
+version = "v1.5 Mod_05 by Igor-M 09/2025"
 
 class ScopeUI(tk.Tk):
     # data1: np.array
@@ -47,6 +49,7 @@ class ScopeUI(tk.Tk):
         self.data1 = []
         self.data2 = []
 
+# Modded by Igor-M 08/2025
     def create_buttons(self):
         # --- Vertical controls ---
         self.vfg = {1: "gold", 2: "#16f7fe", 3: "#fe02fe", 4: "#047efa"}
@@ -77,8 +80,9 @@ class ScopeUI(tk.Tk):
             self.vlabel_update(ch)
 
             # FFT + Save buttons
-            tk.Button(vframe, text="FFT", width=6, command=partial(self.plot_fft, ch)).grid(column=ch, row=4, padx=2, pady=2)
-            tk.Button(vframe, text="Save", width=6, command=partial(self.save_data, ch)).grid(column=ch, row=5, padx=2, pady=2)
+            tk.Button(vframe, text="FFT", width=6, command=partial(self.plot_fft, ch)).grid(column=ch, row=5, padx=2, pady=2)
+            tk.Button(vframe, text="Noise", width=6, command=partial(self.plot_fftN, ch)).grid(column=ch, row=6, padx=2, pady=2)
+            tk.Button(vframe, text="Save", width=6, command=partial(self.save_data, ch)).grid(column=ch, row=4, padx=2, pady=2)
 
         # --- Noise analysis frame (FFT window + averaging + gain + filters) ---
         noise_frame = ttk.Labelframe(self, text="Noise Analysis")
@@ -413,49 +417,127 @@ class ScopeUI(tk.Tk):
         text["text"] = f"{scale}{scale_unit}"
 
     def plot_fft(self, ch):
-        # === load or acquire data ===
         if self.demo and not self.demo == "save":
             with open(self.demo, "rb") as f:
                 self.data1, self.data2 = pickle.load(f)
-                data = self.data2[0] if ch == 2 else self.data1[0]
+                if ch == 2 :
+                    data=self.data2[0]
+                else:
+                    data=self.data1[0]
         else:
-            # NEW IMO
-            Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
-            spectra = []
-            data = None
-            for i in range(Nfft):
-                self.instr.write(":SINGle")
-                print(f"N.{i+1} ({Nfft}) FFT from CH{ch} ..")
-                # wait until acquisition complete
-                timeout = time.time() + 2200.0  # debug only: timeout per shot in seconds
-                while True:
-                    time.sleep(1)
-                    status = self.instr.query(":TRIGger:STATus?").strip().upper()
-                    # DHO can answer RUN, AUTO, WAIT, TD, STOP
-                    if status in ("STOP"):
-                        print(f"N.{i+1} FFT DONE from CH{ch} !")
-                        break  # acquisition done
-                    if time.time() > timeout:
-                        print("Timeout waiting for single shot trigger, proceeding anyway.")
-                        break
-                
-                try:
-                    data = self.get_data(ch)
-                except (ValueError, ChannelNotEnabled):
-                    self.warning["text"] = f"No data from CH{ch}"
-                    print(f"No data retrieved from CH{ch}")
-                    return 1
-                
-                gain = float(self.lna_gain.get())   # linear gain (not dB!)
-                data["y"] = data["y"] / gain
-                xf, ywf_single, wenbw = self.fft_trace(data, window=self.window_var.get())
-                spectra.append(np.abs(ywf_single) ** 2) 
-                
-            # average power spectrum
-            mean_power = np.mean(spectra, axis=0)
-            # convert back to magnitude (Vrms/bin)
-            ywf = np.sqrt(mean_power)
-            # END NEW IMO
+            self.instr.write(":STOP")
+            try:
+                data = self.get_data(ch)
+            except ValueError:
+                self.warning["text"] = f"Got no data from CH{ch}"
+                print("No data retrieved from scope")
+                return 1
+            except ChannelNotEnabled:
+                self.warning["text"] = f"Channel {ch} is not enabled"
+                print(f"Channel {ch} is not enabled")
+                return 1
+            self.instr.write(":RUN")
+        print(f'Sample rate={data["sr"] / 1e6:g} Ms')
+        print(f'FFT max freq={data["sr"] / 2e6:g}MHz')
+        binwidth = data["sr"] / data["mdepth"]
+        # If the FFT has been windowed using Hanning the noise bandwidth needs to be corrected
+        hann_nbw_correction_db = np.log10(1.5)
+        noiseBW = 10 * np.log10(binwidth) + hann_nbw_correction_db
+        print(f"FFT min freq={binwidth:g}Hz")
+        print(f"FFT bin noise BW={noiseBW:.1f}db")
+        if data["bwl"] == '20M':
+            if data["sr"] < 40e6:
+                print_noise = False
+                print("Noise is not accurate due to noise folding, please increase sample rate!")
+        else:
+            if data["sr"] < 500e6:
+                print_noise = False
+                print("Noise is not accurate due to noise folding, please increase sample rate or set BW to 20MHz!")
+
+        print_noise = True
+        def moving_average(x, w):
+            bmw = blackman(w)
+            # noinspection PyTypeChecker
+            return np.convolve(x, bmw, 'same') / (sum(bmw) / len(bmw))
+
+        xf, ywf = self.fft_trace(data,window=self.window_var.get())
+        Vrms = 2.0 / data["N"] * abs(ywf) / np.sqrt(2)
+        avg_size = min(500, int(data["N"] / 10))
+        print(f'Vrms={np.sqrt(sum(data["y"] ** 2) / data["N"]):.3g} V')
+        Vavg = moving_average(Vrms ** 2, avg_size * 2)
+        Vavg = (Vavg / avg_size / 2) ** 0.5
+
+        fig, ax = plt.subplots(3, layout="constrained", figsize=(6, 10))
+        if print_noise:
+            ax[0].semilogy(xf, Vrms, self.vfg[ch],
+                           xf[avg_size:], (Vavg[avg_size:] / 10 ** (noiseBW / 20)))
+        else:
+            ax[0].semilogy(xf, Vrms, self.vfg[ch])
+        ax[0].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
+        ax[0].grid(True)
+        ax[0].set_xlabel("Freq F(Hz)")
+        ax[0].set_ylabel("V")
+
+        if print_noise:
+            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch],
+                           xf[avg_size:], 20 * np.log10(Vavg[avg_size:]) - noiseBW, marker="")
+        else:
+            ax[1].semilogx(xf, 20 * np.log10(Vrms), self.vfg[ch])
+        ax[1].grid(True)
+        ax[1].set_xlabel("Freq (Hz)")
+        ax[1].set_ylabel("dBV")
+        ax[1].legend([f"CH{ch} RBW={binwidth:g}Hz", f"Noise V/sqrt(Hz)"], loc='lower left')
+
+        ax[2].plot(data["x"], data["y"], self.vfg[ch])
+        ax[2].grid(True)
+        ax[2].set_xlabel("time (s)")
+        ax[2].set_ylabel("V")
+        # plt.ion()
+        # plt.pause(.001)
+        plt.show()
+
+
+# Added Noise Analysis 08/2025 by Igor-M
+    def plot_fftN(self, ch):
+        # === acquire data ===
+        # NEW Igor_M
+        Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
+        spectra = []
+        data = None
+        for i in range(Nfft):
+            self.instr.write(":SINGle")
+            print(f"N.{i+1} ({Nfft}) FFT from CH{ch} ..")
+            # wait until acquisition complete
+            timeout = time.time() + 10000.0  # debug only: timeout per shot in seconds
+            while True:
+                time.sleep(1)
+                status = self.instr.query(":TRIGger:STATus?").strip().upper()
+                # DHO can answer RUN, AUTO, WAIT, TD, STOP
+                if status == "STOP":
+                    print(f"N.{i+1} FFT DONE from CH{ch} !")
+                    break  # acquisition done
+                if time.time() > timeout:
+                    print("Timeout waiting for single shot trigger, proceeding anyway.")
+                    break
+            
+            try:
+                data = self.get_data(ch)
+            except (ValueError, ChannelNotEnabled):
+                self.warning["text"] = f"No data from CH{ch}"
+                print(f"No data retrieved from CH{ch}")
+                self.instr.write(":RUN")
+                return 1
+            
+            self.instr.write(":RUN")
+            gain = float(self.lna_gain.get())   # linear gain (not dB!)
+            data["y"] = data["y"] / gain
+            xf, ywf_single, wenbw = self.fft_traceN(data, window=self.window_var.get())
+            spectra.append(np.abs(ywf_single) ** 2) 
+            
+        # average power spectrum
+        mean_power = np.mean(spectra, axis=0)
+        # convert back to magnitude (Vrms/bin)
+        ywf = np.sqrt(mean_power)
 
         print(f"Samples read: {Nfft} * {data['N']}")
         print(f'Sample rate={data["sr"] / 1e3:g} ksps')
@@ -470,21 +552,7 @@ class ScopeUI(tk.Tk):
 
         print_noise = True
 
-        # === helper: weighted moving average of power (normalized) ===
-        def weighted_moving_avg_power(x, w):
-            if w <= 1:
-                return x
-            w = int(w)
-            win = np.blackman(w)
-            s = np.sum(win)
-            if s == 0:
-                return x
-            win = win / s
-            return np.convolve(x, win, mode='same')
-
         # === FFT trace & per-bin RMS voltage ===
-        #xf, ywf = self.fft_trace(data, window=self.window_var.get())  # xf in Hz, ywf complex
-        #Vrms = 2.0 / data["N"] * np.abs(ywf) / np.sqrt(2)              # V RMS per bin (raw bin RMS)
         Vrms =  2.0 / data["N"] * (ywf)  / np.sqrt(2.0)              # V RMS per bin (raw bin RMS)
 
         # === Noise Spectral Density (V/√Hz) and conversions ===
@@ -550,24 +618,22 @@ class ScopeUI(tk.Tk):
             print(f"PSD slope between {fmin:g}–{fmax:g} Hz: {slope:.3f} dB/decade")
             #print(f"Equivalent 1/f^alpha exponent: alpha = {alpha:.3f}")
             
-            if abs(alpha) < 0.2:
-                noise_type = "White (Thermal/shot)"
-            elif 0.8 <= alpha <= 1.2:
-                noise_type = "Flicker (1/f)"
-            elif 1.8 <= alpha <= 2.2:
-                noise_type = "Random walk (1/f²)"
-            elif 2.8 <= alpha <= 3.2:
-                noise_type = "Black (1/f³)"
+            if abs(alpha) < 0.25:
+                noise_type = "White (Thermal/Shot)"
+            elif 0.6 <= alpha <= 1.4:
+                noise_type = "Flicker"
+            elif 1.6 <= alpha <= 2.4:
+                noise_type = "Random walk"
+            elif 2.6 <= alpha <= 3.4:
+                noise_type = "Black"
             else:
-                noise_type = f"Unclassified (α ≈ {alpha:.3f})"
-    
-            print(f"Est. noise type (α ≈ {alpha:.3f}): {noise_type}")
+                noise_type = f"Unclassified.."
+
+            print(f"Est. Noise type (α ≈ {alpha:.2f}): {noise_type}")
 
         else:
             print(f"No data points in selected filter range {fmin}–{fmax} Hz")
             
-
-
         # === thermal noise reference lines (50Ω at 25°C) ===
         k = 1.380649e-23
         T = 298.15
@@ -631,10 +697,8 @@ class ScopeUI(tk.Tk):
 
         plt.show()
 
-
-
-    def fft_trace(self, data, window="None"):
-        # 1kHz scope calibration is 3Vpp => db20(2*3/pi)=5.62dBVa and 2.62dBVrms
+# Modded for Noise Analysis by Igor-M
+    def fft_traceN(self, data, window="None"):
         if window == "None":
             win = np.ones(data["N"])
             wenbw = 1.0
@@ -652,13 +716,35 @@ class ScopeUI(tk.Tk):
             wenbw = 1.5
         else:
             print("Unknown window")
-        # For tones only:
+        # For tones mainly
         cpg = sum(win) / len(win)  # coherent power gain
         y_windowed=data["y"] * win / cpg
-        # For FFT
+        # For general FFT
         ywf = rfft(y_windowed)
         xf = rfftfreq(data["N"], data["xincr"])
         return xf[1:], ywf[1:], wenbw
+        
+        
+    def fft_trace(self, data, window="None"):
+        # 1kHz scope calibration is 3Vpp => db20(2*3/pi)=5.62dBVa and 2.62dBVrms
+        if  window == "None":
+            win = np.ones(data["N"])
+        elif window == "FlatTop":
+            win = flattop(data["N"])
+        elif window == "Blackman":
+            win = blackman(data["N"])
+        elif window == "Kaiser":
+            win = kaiser(data["N"], beta=14)
+        elif window == "Hann":
+            win = hann(data["N"])
+        else:
+            print("Unknown window")
+        # noinspection PyTypeChecker
+        cpg = sum(win) / len(win)  # coherent power gain
+        y_windowed=data["y"] * win / cpg
+        ywf = rfft(y_windowed)
+        xf = rfftfreq(data["N"], data["xincr"])
+        return xf[1:], ywf[1:]        
 
     def save_data(self, ch, file=""):
         if self.demo and not self.demo == "save":
@@ -681,9 +767,13 @@ class ScopeUI(tk.Tk):
                 print(f"Channel {ch} is not enabled")
                 return 1
             self.instr.write(":RUN")
+        # Modded by Igor-M 08/2025            
+        # Create timestamp string
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"CH{ch}_{timestamp}.csv"
         csv_data = np.transpose(np.stack((data["x"], data["y"])))
-        np.savetxt(f"CH{ch}.csv", csv_data, delimiter=',')
-        self.warning["text"] = f"Saved to CH{ch}.csv"
+        np.savetxt(filename, csv_data, delimiter=',')
+        self.warning["text"] = f"Saved to {filename}"
 
 
 if __name__ == '__main__':
