@@ -72,15 +72,18 @@ Note: doublecheck your Trigger settings, otherwise the scope will not start with
 ***
 The Thermal noise levels in the graphs are for an ideal 50ohm resistor at 25C (an example only).
 
-Note: Mind that when you set for example Horizontal/div=100secs and N = 100
-you will wait aprox 100800 seconds (28 hours) for the resulting graphs :)
-So running the tool on an Rpi or on a small linux box (instead on your 96 core ThreadRipper)
-might be a good idea.
-The next step could be to replace the scope with a small sampling box as well..
+Note: Mind that when you set for example Horizontal/div=100secs and N = 100 you will wait aprox 100800 seconds (28 hours) for the resulting graphs :)
+So running the tool on an Rpi or on a small linux box (instead on your 96 core ThreadRipper) might be a good idea.
+The next step might be to replace the scope with a small sampling box as well..
+
+
 
 ![Screenshot](pictures/Noise_Analyser.png)
 
-Regards.
+
+
+Regards,
+
 by Igor-M aka iMo 2025/09/01
 
 
