@@ -66,9 +66,10 @@ You should set the vertical resolution and horizontal resolution and enter the N
 By clicking on Noise button it starts to sample via Single Shot (the waveform appears on the display,
 for example, with set Horizontal/div=10secs after 50secods) and then it reads the data off the scope
 via LAN and makes the single FFT math (and continues in a loop).
-Note: doublecheck your Trigger settings, otherwise it will not start with sampling!
 After N loops it creates the results as described above.
-
+***
+Note: doublecheck your Trigger settings, otherwise the scope will not start with sampling!
+***
 The Thermal noise levels in the graphs are for an ideal 50ohm resistor at 25C (an example only).
 
 Note: Mind that when you set for example Horizontal/div=100secs and N = 100
