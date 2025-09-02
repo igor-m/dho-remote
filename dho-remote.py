@@ -3,7 +3,7 @@
 #  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Modded by Igor-M aka iMo 2025/08/28 for Noise Analysis
 #  v 1.5 MOD_06
-#  31st August 2025 
+#  31st August 2025
 #  https://github.com/igor-m/dho-remote
 #  more on eevblog:
 #  https://www.eevblog.com/forum/metrology/simple-noise-analyser-for-scope-owners-who-do-not-have-that-option/msg6028551/#msg6028551
@@ -128,6 +128,15 @@ class ScopeUI(tk.Tk):
         self.meas_id.set("DUT#1")  # default ID
         ttk.Label(master=noise_frame, text="Measurement ID:").grid(column=0, row=row, sticky=tk.W, padx=5, pady=2)
         ttk.Entry(master=noise_frame, width=16, textvariable=self.meas_id).grid(column=1, row=row, sticky=tk.W, padx=5, pady=2)
+        
+        # Save checkbox
+        row = 12
+        self.save_data_flag = tk.BooleanVar(value=False)  # default: not ticked
+        ttk.Checkbutton(
+            master=noise_frame,
+            text="Save .csv",
+            variable=self.save_data_flag
+        ).grid(column=0, row=row, columnspan=2, sticky=tk.W, padx=5, pady=2)
 
 
         # --- Horizontal controls ---
@@ -542,19 +551,21 @@ class ScopeUI(tk.Tk):
             self.instr.write(":RUN")
             
             # Save current data with name Measurement_ID and timestamp
-            meas_id_name = self.meas_id.get().strip().replace(" ", "_")
-            # Timestamp with milliseconds
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
-            # Filename in Noise_Measurements folder
-            filename = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.csv")
+            if self.save_data_flag.get():  # only save if checked
+                meas_id_name = self.meas_id.get().strip().replace(" ", "_")
+                # Timestamp with milliseconds
+                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
+                # Filename in Noise_Measurements folder
+                filename = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.csv")
 
-            # Save data
-            csv_data = np.transpose(np.stack((data["x"], data["y"])))
-            np.savetxt(filename, csv_data, delimiter=',')
-            rel_path = os.path.relpath(filename, start=os.getcwd())
-            self.warning["text"] = f"Saved to {rel_path}"
-            print(f"Saved data to {rel_path}")
-            
+                # Save data
+                csv_data = np.transpose(np.stack((data["x"], data["y"])))
+                np.savetxt(filename, csv_data, delimiter=',')
+                rel_path = os.path.relpath(filename, start=os.getcwd())
+                self.warning["text"] = f"Saved to {rel_path}"
+                print(f"Saved data to {rel_path}")
+            else:
+                self.warning["text"] = "Data not saved (Save unchecked)"
             
             
             gain = float(self.lna_gain.get())   # linear gain (not dB!)
@@ -671,9 +682,9 @@ class ScopeUI(tk.Tk):
         thermal_uV_oc = thermal_v_oc * 1e6
         thermal_uV_matched = thermal_v_matched * 1e6
         ref_line_open = np.full_like(xf, thermal_uV_oc)
-        ref_line_matched = np.full_like(xf, thermal_uV_matched)
+        #ref_line_matched = np.full_like(xf, thermal_uV_matched)
         ref_line_open_db = 20.0 * np.log10(np.maximum(ref_line_open, tiny))
-        ref_line_matched_db = 20.0 * np.log10(np.maximum(ref_line_matched, tiny))
+        #ref_line_matched_db = 20.0 * np.log10(np.maximum(ref_line_matched, tiny))
 
         # === choose start index for plotting: skip DC (index 0) but keep very low freqs ===
         #start_idx = 1 if len(xf) > 1 else 0
@@ -686,8 +697,8 @@ class ScopeUI(tk.Tk):
         # NSD in µV/√Hz (log-log axis)
         if print_noise:
             ax[0].loglog(xf[start_idx:stop_idx], NSD_uV_per_rtHz[start_idx:stop_idx], label="Noise density [µV/√Hz]")
-            ax[0].plot(xf, ref_line_open, 'k--', label=f"Thermal (open) ≈ {thermal_uV_oc*1e3:.3f} nV/√Hz")
-            ax[0].plot(xf, ref_line_matched, 'r:', label=f"Thermal (matched) ≈ {thermal_uV_matched*1e3:.3f} nV/√Hz")
+            ax[0].plot(xf, ref_line_open, 'k--', label=f"Thermal (50\u03A9) ≈ {thermal_uV_oc*1e3:.3f} nV/√Hz")
+            #ax[0].plot(xf, ref_line_matched, 'r:', label=f"Thermal (matched) ≈ {thermal_uV_matched*1e3:.3f} nV/√Hz")
             ax[0].legend(loc='lower left')
         else:
             ax[0].plot(xf, ref_line_open, 'k--', label="Thermal reference")
@@ -699,8 +710,8 @@ class ScopeUI(tk.Tk):
         # NSD in dBµV/√Hz (semilog x)
         if print_noise:
             ax[1].semilogx(xf[start_idx:stop_idx], NSD_dB_uV[start_idx:stop_idx], label="Noise density [dBµV/√Hz]")
-            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (open) dBµV/√Hz")
-            ax[1].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
+            ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal (50\u03A9) dBµV/√Hz")
+            #ax[1].semilogx(xf, ref_line_matched_db, 'r:', label="Thermal (matched) dBµV/√Hz")
             ax[1].legend(loc='lower left')
         else:
             ax[1].semilogx(xf, ref_line_open_db, 'k--', label="Thermal reference dB")
@@ -717,7 +728,7 @@ class ScopeUI(tk.Tk):
         # cumulative thermal power up to each bin index
         thermal_cum_power_open = thermal_power_per_bin_open * np.arange(1, len(xf) + 1)
         thermal_cum_rms_open = np.sqrt(thermal_cum_power_open) * 1e6
-        ax[2].semilogx(xf[start_idx:], thermal_cum_rms_open[start_idx:], 'k--', label="Thermal integrated (open) µV RMS")
+        ax[2].semilogx(xf[start_idx:], thermal_cum_rms_open[start_idx:], 'k--', label="Thermal (50\u03A9) µV RMS")
         ax[2].grid(True, which="both")
         ax[2].set_xlabel("Frequency (Hz)")
         ax[2].set_ylabel("Integrated noise (µV RMS)")
