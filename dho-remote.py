@@ -22,10 +22,11 @@ from functools import partial
 import pickle
 from datetime import datetime
 import time
+import csv
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.5 Mod_07 by Igor-M 09/2025"
+version = "v1.5 Mod_08 by Igor-M 09/2025"
 
 class TeeLogger:
     def __init__(self, *streams):
@@ -550,6 +551,7 @@ class ScopeUI(tk.Tk):
         Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
         spectra = []
         data = None
+        meta_save = True
         for i in range(Nfft):
             self.instr.write(":SINGle")
             print(f"N.{i+1} ({Nfft}) FFT from CH{ch} ..")
@@ -591,6 +593,26 @@ class ScopeUI(tk.Tk):
                 print(f"Saved data to {rel_path}")
             
             # Always save the raw binary data
+            # SAVE metadata once
+            if meta_save == True:
+                meta = {
+                "yincr": float(data["yincr"]),
+                "yorg": float(data["yorg"]),
+                "yref": float(data["yref"]),
+                "xincr": float(data["xincr"]),
+                "xorg": float(data["xorg"]),
+                "mdepth": float(data["mdepth"]),
+                "sr": float(data["sr"]),
+                "bwl": data["bwl"], }   # string, keep as-is 
+                filenamemeta = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.meta.csv")
+            # Save metadata as CSV
+            with open(filenamemeta, "w", newline="") as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(["parameter", "value"])
+                for k, v in meta.items():
+                    writer.writerow([k, v])
+            meta_save = False
+            
             filenamebin = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.bin")
             # Save .bin data
             data["ybin"].tofile(filenamebin)
