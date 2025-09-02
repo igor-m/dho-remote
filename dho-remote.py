@@ -2,7 +2,7 @@
 
 #  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 #  Modded by Igor-M aka iMo 2025/08/28 for Noise Analysis
-#  v 1.5 MOD_06
+#  v 1.5 MOD_XY
 #  31st August 2025
 #  https://github.com/igor-m/dho-remote
 #  more on eevblog:
@@ -10,6 +10,7 @@
 #  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
 import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -24,7 +25,24 @@ import time
 
 from scope.rigol import Scope, Siglent, ChannelNotEnabled
 
-version = "v1.5 Mod_06 by Igor-M 09/2025"
+version = "v1.5 Mod_07 by Igor-M 09/2025"
+
+class TeeLogger:
+    def __init__(self, *streams):
+        self.streams = streams
+    def write(self, data):
+        for s in self.streams:
+            try:
+                s.write(data)
+                s.flush()
+            except ValueError:
+                pass  # ignore closed stream
+    def flush(self):
+        for s in self.streams:
+            try:
+                s.flush()
+            except ValueError:
+                pass  # ignore closed stream
 
 class ScopeUI(tk.Tk):
     # data1: np.array
@@ -521,6 +539,14 @@ class ScopeUI(tk.Tk):
         self.save_dir = os.path.join(os.getcwd(), "Noise_Measurements")
         os.makedirs(self.save_dir, exist_ok=True)
         
+        meas_id_name = self.meas_id.get().strip().replace(" ", "_")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
+        log_file = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.txt")
+        # open a file for logging
+        log_file_c = open(log_file, "w")
+        # redirect prints to Console nad log file 
+        sys.stdout = TeeLogger(sys.__stdout__, log_file_c)
+        
         Nfft = min(max(int(self.nshots.get()), 1), 1000)  # clamp 1–1000
         spectra = []
         data = None
@@ -550,6 +576,7 @@ class ScopeUI(tk.Tk):
             
             self.instr.write(":RUN")
             
+
             # Save current data with name Measurement_ID and timestamp
             if self.save_data_flag.get():  # only save if checked
                 meas_id_name = self.meas_id.get().strip().replace(" ", "_")
@@ -668,7 +695,7 @@ class ScopeUI(tk.Tk):
             else:
                 noise_type = f"Unclassified.."
 
-            print(f"Est. Noise type (α ≈ {alpha:.2f}): {noise_type}")
+            print(f"Est. Noise type (alpha ~ {alpha:.2f}): {noise_type}")
 
         else:
             print(f"No data points in selected filter range {fmin}–{fmax} Hz")
@@ -733,8 +760,16 @@ class ScopeUI(tk.Tk):
         ax[2].set_xlabel("Frequency (Hz)")
         ax[2].set_ylabel("Integrated noise (µV RMS)")
         ax[2].legend(loc='lower right')
+        
+        # Save the Graphs
+        meas_id_name = self.meas_id.get().strip().replace(" ", "_")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # keep ms
+        #img_filename = f"{meas_id_name}_{timestamp}.png"
+        img_path = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.png")
+        fig.savefig(img_path, dpi=300, bbox_inches="tight")
 
         plt.show()
+        log_file_c.close()
 
 # Modded for Noise Analysis by Igor-M
     def fft_traceN(self, data, window="None"):
