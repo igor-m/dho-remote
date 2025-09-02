@@ -768,8 +768,9 @@ class ScopeUI(tk.Tk):
         img_path = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.png")
         fig.savefig(img_path, dpi=300, bbox_inches="tight")
 
-        plt.show()
         log_file_c.close()
+        plt.show()
+
 
 # Modded for Noise Analysis by Igor-M
     def fft_traceN(self, data, window="None"):
