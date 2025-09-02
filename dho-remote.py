@@ -576,23 +576,27 @@ class ScopeUI(tk.Tk):
             
             self.instr.write(":RUN")
             
-
-            # Save current data with name Measurement_ID and timestamp
+            meas_id_name = self.meas_id.get().strip().replace(" ", "_")
+            # Timestamp with milliseconds
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
+            # Save current data into .csv with name Measurement_ID and timestamp
             if self.save_data_flag.get():  # only save if checked
-                meas_id_name = self.meas_id.get().strip().replace(" ", "_")
-                # Timestamp with milliseconds
-                timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]  # truncate to milliseconds
-                # Filename in Noise_Measurements folder
+                # Filename for .csv in Noise_Measurements folder
                 filename = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.csv")
-
-                # Save data
+                # Save .csv data
                 csv_data = np.transpose(np.stack((data["x"], data["y"])))
                 np.savetxt(filename, csv_data, delimiter=',')
                 rel_path = os.path.relpath(filename, start=os.getcwd())
                 self.warning["text"] = f"Saved to {rel_path}"
                 print(f"Saved data to {rel_path}")
-            else:
-                self.warning["text"] = "Data not saved (Save unchecked)"
+            
+            # Always save the raw binary data
+            filenamebin = os.path.join(self.save_dir, f"{meas_id_name}_{timestamp}.bin")
+            # Save .bin data
+            data["ybin"].tofile(filenamebin)
+            rel_path = os.path.relpath(filenamebin, start=os.getcwd())
+            self.warning["text"] = f"Saved to {rel_path}"
+            print(f"Saved data to {rel_path}")
             
             
             gain = float(self.lna_gain.get())   # linear gain (not dB!)

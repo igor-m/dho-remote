@@ -53,13 +53,13 @@ class Scope(pyvisa.ResourceManager):
         data["bwl"] = instr.query(f":CHANnel{ch}:BWLimit?")
 
 
-        data["y"] = instr.query_binary_values(":WAVeform:data?", datatype='H', is_big_endian=False, container=np.array)
+        data["ybin"] = instr.query_binary_values(":WAVeform:data?", datatype='H', is_big_endian=False, container=np.array)
 
-        if min(data["y"]) == 0:
+        if min(data["ybin"]) == 0:
             print(f"WARNING:CH{ch} data clips on minimum!")
-        if max(data["y"]) == 2**16-1:
+        if max(data["ybin"]) == 2**16-1:
             print(f"WARNING:CH{ch} data clips on maximum!")
-        data["y"] = (data["y"] - data["yref"] - data["yorg"]) * data["yincr"]
+        data["y"] = (data["ybin"] - data["yref"] - data["yorg"]) * data["yincr"]
         data["ymax"] = (2**16-1 - data["yref"] - data["yorg"]) * data["yincr"]
         data["ymin"] = (      0 - data["yref"] - data["yorg"]) * data["yincr"]
         data["N"] = len(data["y"])
