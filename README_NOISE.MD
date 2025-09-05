@@ -83,7 +83,7 @@ The graphs (while still in the tool) are interactive, so you can zoom-in, etc.
 All files are saved into the "Noise_Measurement" folder - it is created automatically (when it does not exist) inside the current directory - and all subsequent measurement data are written there, and the filenames (based on the "Measurement ID" you may enter in) are date/time stamped with a msecs resolution.
 
 Update2: now it always saves the raw binary data coming from the scope in each measurement step as well.
-The names of the files as above with .bin at the end, the samples are 16bit (see the rigol.py), thus, for example, N*1M of data takes ~N*2MB of disk space.
+The names of the files as above with .bin at the end, the samples are 16bit (see the rigol.py), thus, for example, N x 1M of data takes ~N x 2MB of disk space.
 It saves the .bin data the "Save .csv" checkbox status regardless.
 
 Update3: added the automatic saving of the metadata related to the 16bit binary samples (in .csv format like .meta.csv).
