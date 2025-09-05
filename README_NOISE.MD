@@ -60,21 +60,24 @@ So -10dB via a frequency decade gives you slope = -1.0, and the alpha = 1.0.
 It estimates the type of noise as well (see the source).
 For somehow good results the bandwidth of the Bandpass shall be at least 2 decades.
 
-The "Integrated Vrms" is typically a little bit lower compared to the oscilloscope's AC.RMS readings.
+The "Integrated Vrms" is usually slightly lower (like 2-5%) than the oscilloscope’s built-in AC.RMS reading.
 
-You should set the vertical resolution and horizontal resolution and enter the Noise parameters.
-By clicking on Noise button it starts to sample via Single Shot (the waveform appears on the display,
-for example, with set Horizontal/div=10secs after 50secods) and then it reads the data off the scope
-via LAN and makes the single FFT math (and continues in a loop).
-After N loops it creates the results as described above.
-***
-Note: doublecheck your Trigger settings, otherwise the scope will not start with sampling!
-***
-The Thermal noise levels in the graphs are for an ideal 50ohm resistor at 25C (an example only).
+Usage notes:
 
-Note: Mind that when you set for example Horizontal/div=100secs and N = 100 you will wait aprox 100800 seconds (28 hours) for the resulting graphs :)
-So running the tool on an Rpi or on a small linux box (instead on your 96 core ThreadRipper) might be a good idea.
-The next step might be to replace the scope with a small sampling box as well..
+a) Set the vertical and horizontal resolution via this tool and enter the other Noise parameters.
+
+b) Press the "Noise" button to start sampling in Single Shot mode. The waveform will appear on the scope display after some delay (e.g., with Horizontal/div = 10secs after 50secs).
+
+c) The program then retrieves the waveform data via LAN, save them raw under "Measurement ID" name in a .bin format (with related metadata) and if ticked the checkbox via a .csv format as well, computes the FFT, averages the FFTs, and repeats that in a loop.
+
+d) After N loops it outputs the graphs and the summary as above, the console info (.txt) and graphs (.png) are saved automatically as well.
+
+Important: Double-check your trigger settings in your scope, otherwise acquisition will not start.
+
+The thermal noise reference levels in the graphs are for an ideal 50 Ω resistor at 25 °C (for illustration only).
+
+Note: If you set, for example, Horizontal/div = 100secs and N = 100, you will wait ~100800 seconds (~28 hours) for the results.
+Running this on a Raspberry Pi or a small Linux box (instead on your 96-core Threadripper :) ) might be more practical.
 
 Update1 - in the Noise tool you may now set a checkbox "Save .csv" when you want to save the scope's raw data.
 Also now it always saves the console information into the .txt file, as well as it always saves the resulting graphs in the .png file.
