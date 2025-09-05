@@ -3,7 +3,7 @@ Control your digital oscilloscope remotely. Create FFT and Bode and Noise Analys
 ************************************************************************************************************
 
 I spent a couple of days with implementing a simple "Noise Analysis" into this tool and here you are:
-It works under Win11 as well as under Linux (ie. Armbian in a cheapo TvBox).
+It works under Win11 as well as under Linux (ie. Armbian in a cheapo MediaBox).
 The original Bode functionality shall work as well (not tested yet).
 
 Below you may see a typical results you may expect.
@@ -15,7 +15,7 @@ FFT windows:               for Noise it is recommended the None (Rectangular)
 
 FFT Averaging (N):         you may enter the number of FFTs averaged, 50
 
-LNA Gain (A):              here you enter the gain of your LNA as an integer (not dB), like 10000
+LNA Gain (A):              here you enter the gain of your LNA as an real number (not dB), like 10000
 
 LNA Filter from (Hz):      the HPF's -3db corner frequency, like 0.1
 
@@ -75,6 +75,37 @@ The Thermal noise levels in the graphs are for an ideal 50ohm resistor at 25C (a
 Note: Mind that when you set for example Horizontal/div=100secs and N = 100 you will wait aprox 100800 seconds (28 hours) for the resulting graphs :)
 So running the tool on an Rpi or on a small linux box (instead on your 96 core ThreadRipper) might be a good idea.
 The next step might be to replace the scope with a small sampling box as well..
+
+
+    Posts: 6177
+    Country: tt
+        View Profile Personal Message (Online) 
+
+Re: Simple Noise Analyser for scope owners who do not have that option
+« Reply #3 on: 02-09-2025, 06:58:16 »
+
+    Reply
+    Quote
+    Modify
+    Remove
+
+Update - in the Noise tool you may now set a checkbox "Save .csv" when you want to save the scope's raw data.
+Also now it always saves the console information into the .txt file, as well as it always saves the resulting graphs in the .png file.
+The graphs (while still in the tool) are interactive, so you can zoom-in, etc.
+
+All files are saved into the "Noise_Measurement" folder - it is created automatically (when it does not exist) inside the current directory - and all subsequent measurement data are written there, and the filenames (based on the "Measurement ID" you may enter in) are date/time stamped with a msecs resolution.
+
+Update2: now it always saves the raw binary data coming from the scope in each measurement step as well.
+The names of the files as above with .bin at the end, the samples are 16bit (see the rigol.py), thus, for example, N*1M of data takes ~N*2MB of disk space.
+It saves the .bin data the "Save .csv" checkbox status regardless.
+
+Update3: added the automatic saving of the metadata related to the 16bit binary samples (in .csv format like .meta.csv).
+
+Thus after a measurement you shall see 4+ new files in the "Noise_Measurement" folder (N* .bin, .meta.csv, .txt, .png).
+When the "Save .csv" checkbox is enabled you will get additional N .csv files.
+
+PS: for linux users - do not forget to give permission to the folder with the dho-remote, otherwise it will shoot an error with "permission denied" when creating the Noise_Measurement folder inside (and writing the data there then)..
+
 
 
 
