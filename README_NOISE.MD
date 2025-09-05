@@ -76,20 +76,7 @@ Note: Mind that when you set for example Horizontal/div=100secs and N = 100 you 
 So running the tool on an Rpi or on a small linux box (instead on your 96 core ThreadRipper) might be a good idea.
 The next step might be to replace the scope with a small sampling box as well..
 
-
-    Posts: 6177
-    Country: tt
-        View Profile Personal Message (Online) 
-
-Re: Simple Noise Analyser for scope owners who do not have that option
-« Reply #3 on: 02-09-2025, 06:58:16 »
-
-    Reply
-    Quote
-    Modify
-    Remove
-
-Update - in the Noise tool you may now set a checkbox "Save .csv" when you want to save the scope's raw data.
+Update1 - in the Noise tool you may now set a checkbox "Save .csv" when you want to save the scope's raw data.
 Also now it always saves the console information into the .txt file, as well as it always saves the resulting graphs in the .png file.
 The graphs (while still in the tool) are interactive, so you can zoom-in, etc.
 
